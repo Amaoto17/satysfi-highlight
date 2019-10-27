@@ -1,0 +1,79 @@
+module Vec : sig
+
+  type 'a vec
+
+  val empty : 'a vec
+  val size : 'a vec -> int
+  val get : 'a vec -> int -> 'a option
+  val push : 'a vec -> 'a -> 'a vec
+  val set : 'a vec -> int -> 'a -> 'a vec
+
+end = struct
+
+  type 'a heap =
+    | Empty
+    | Node of 'a * 'a heap * 'a heap
+
+  type 'a vec = (|
+    heap : 'a heap;
+    size : int;
+  |)
+
+  type visit-dir = Left | Right
+
+  let empty = (| heap = Empty; size = 0 |)
+
+  let size t = t#size
+
+  let build-path n =
+    let-rec iter acc k =
+      if k < 2 then acc
+      else
+        let k1 = k mod 2 in
+        if k1 == 0 then iter (Left :: acc) (k / 2)
+        else iter (Right :: acc) (k / 2)
+    in
+    iter [] (n + 1)
+
+  let get t n =
+    let-rec iter heap path =
+      match (heap, path) with
+      | (Empty, _) -> None
+      | (Node (e, _, _), []) -> Some e
+      | (Node (_, left, right), dir :: rest) -> (
+          match dir with
+          | Left -> iter left rest
+          | Right -> iter right rest
+        )
+    in
+    iter t#heap (build-path n)
+
+  let push t e =
+    let-rec iter heap path =
+      match (heap, path) with
+      | (Empty, _) -> Node (e, Empty, Empty)
+      | (Node x, []) -> Node x
+      | (Node (e1, left, right), dir :: rest) -> (
+          match dir with
+          | Left -> Node (e1, (iter left rest), right)
+          | Right -> Node (e1, left, (iter right rest))
+        )
+    in
+    let heap = iter t#heap (build-path (size t)) in
+    (| heap = heap; size = t#size + 1 |)
+
+  let set t n e =
+    let-rec iter heap path =
+      match (heap, path) with
+      | (Empty, _) -> Empty
+      | (Node (_, left, right), []) -> Node (e, left, right)
+      | (Node (e1, left, right), dir :: rest) -> (
+          match dir with
+          | Left -> Node (e1, (iter left rest), right)
+          | Right -> Node (e1, left, (iter right rest))
+        )
+    in
+    let heap = iter t#heap (build-path n) in
+    (| t with heap = heap |)
+
+end

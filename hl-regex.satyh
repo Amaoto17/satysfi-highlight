@@ -1,16 +1,27 @@
 @require: option
+@import: hl-vector
 @import: hl-parser
 
 open Parser
+
+
+type quantity =
+  | Greedy
+  | Reluctant
+  | Possessive
 
 
 type node =
   | Char of string
   | Concat of node list
   | Alt of node * node
+  | Opt of quantity * node
+  | Many of quantity * node
+  | Many1 of quantity * node
 
 
 type inst =
+  | OpEmpty
   | OpChar of string
   | OpMatch
   | OpSplit of int * int
@@ -18,14 +29,14 @@ type inst =
 
 
 type exec-ctx = (|
-  inst-seq : inst list;
+  inst-seq : inst Vec.vec;
   pc : int;
   pos-stack : int list;
   matched : string list;
 |)
 
 let exec-ctx-init = (|
-  inst-seq = [];
+  inst-seq = Vec.empty;
   pc = 0;
   pos-stack = [];
   matched = [];
@@ -38,30 +49,48 @@ module Syntax : sig
 
 end = struct
 
-  let re-meta-char = `|`
+  let re-meta-char = `|?*+`
 
   let item = none-of re-meta-char
 
-  let primary = fun st -> st |> run (
+  let-rec primary = fun st -> st |> run (
     item >>= (fun c ->
       return (Char c)
     )
   )
 
-  let seq = fun st -> st |> run (
+  and quantifier builder =
+    choice [
+      char `?` >> return (builder Reluctant)
+    ; char `+` >> return (builder Possessive)
+    ; return (builder Greedy)
+    ]
+
+  and rep = fun st -> st |> run (
+    primary >>= (fun t ->(
+      choice [
+        char `?` >> quantifier (fun q -> Opt (q, t))
+      ; char `*` >> quantifier (fun q -> Many (q, t))
+      ; char `+` >> quantifier (fun q -> Many1 (q, t))
+      ; return t
+      ]
+    ))
+  )
+
+  and seq = fun st -> st |> run (
     many primary >>= (fun ts -> (
       return (Concat ts)
     ))
   )
 
-  let alt = fun st -> st |> run (
+  and alt = fun st -> st |> run (
     let alt-op =
       char `|` >> return (fun t1 t2 -> Alt (t1, t2))
     in
     chainl seq alt-op
   )
 
-  let re = fun st -> st |> run (
+  and re = fun st -> st |> run (
     alt << eof
   )
 
@@ -70,13 +99,18 @@ end
 
 module Exec : sig
 
-  val run : inst list -> (string list) exec-ctx parser
+  val run : inst Vec.vec -> (string list) exec-ctx parser
 
 end = struct
 
-  let add-pc d =
+  let increment-pc =
     get-state >>= (fun ctx -> (
-      put-state (| ctx with pc = ctx#pc + d |)
+      put-state (| ctx with pc = ctx#pc + 1 |)
+    ))
+
+  let set-pc pc =
+    get-state >>= (fun ctx -> (
+      put-state (| ctx with pc = pc |)
     ))
 
   let ensure len =
@@ -124,30 +158,39 @@ end = struct
       ))
     ))
 
+  % let fetch =
+  %   get-state >>= (fun ctx -> (
+  %     match List.nth ctx#pc ctx#inst-seq with
+  %     | None -> fail
+  %     | Some inst -> return inst 
+  %   ))
+
   let fetch =
     get-state >>= (fun ctx -> (
-      match List.nth ctx#pc ctx#inst-seq with
+      match Vec.get ctx#inst-seq ctx#pc with
       | None -> fail
-      | Some inst -> return inst 
+      | Some inst -> return inst
     ))
 
   let-rec next = fun st -> st |> run (
-    add-pc 1 >> exec
+    increment-pc >> exec
   )
 
-  and jump diff = fun st -> st |> run (
-    add-pc diff >> exec
+  and jump pc = fun st -> st |> run (
+    set-pc pc >> exec
   )
 
-  and split d1 d2 = fun st -> (
-    match st |> jump d1 with
+  and split pc1 pc2 = fun st -> (
+    match st |> jump pc1 with
     | Some x -> Some x
-    | None -> st |> jump d2
+    | None -> st |> jump pc2
   )
 
   and exec = fun st -> st |> run (
     fetch >>= (fun inst -> (
       match inst with
+      | OpEmpty ->
+          next
       | OpChar c ->
           ensure 1 >>
           match1 c >>
@@ -155,10 +198,10 @@ end = struct
       | OpMatch ->
           capture >>
           get-all-match
-      | OpSplit (d1, d2) ->
-          split d1 d2
-      | OpJump d ->
-          jump d
+      | OpSplit (pc1, pc2) ->
+          split pc1 pc2
+      | OpJump pc ->
+          jump pc
     ))
   )
 
@@ -184,23 +227,33 @@ end = struct
   let dummy = ()
 
   let build ast =
+    let-mutable inst-seq <- Vec.empty in
+    let emit inst = inst-seq <- Vec.push !inst-seq inst in
+    let curpos () = Vec.size !inst-seq in
+    let reserve () =
+      let i = curpos () in
+      let () = emit OpEmpty in
+      fun inst -> (inst-seq <- Vec.set !inst-seq i inst)
+    in
     let-rec iter node =
       match node with
       | Char c ->
-          [OpChar c]
+          emit (OpChar c)
       | Concat node-list ->
-          List.map iter node-list |> List.concat
+          List.iter iter node-list
       | Alt (t1, t2) ->
-          let code-t1 = iter t1 in
-          let code-t2 = iter t2 in
-          let len-t1 = List.length code-t1 in
-          let len-t2 = List.length code-t2 in
-          List.append
-            (OpSplit (1, len-t1 + 2) :: code-t1)
-            (OpJump (len-t2 + 1) :: code-t2)
+          let set-split = reserve () in
+          let t1-begin = curpos () in
+          let () = iter t1 in
+          let set-jump = reserve () in
+          let t2-begin = curpos () in
+          let () = iter t2 in
+          let () = set-split (OpSplit (t1-begin, t2-begin)) in
+          set-jump (OpJump (curpos ()))
     in
-    let inst-seq = List.append (iter ast) [OpMatch] in
-    Exec.run inst-seq
+    let () = iter ast in
+    let () = emit OpMatch in
+    Exec.run !inst-seq
 
   let compile pat =
     match easy-parse Syntax.re pat with

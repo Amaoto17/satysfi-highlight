@@ -28,6 +28,7 @@ module Parser : sig
   val map : ('a -> 'b) -> 'a 'u parser -> 'b 'u parser
   val look-ahead : 'a 'u parser -> 'a 'u parser
   val not-followed-by : 'a 'u parser -> unit 'u parser
+  val choice : ('a 'u parser) list -> 'a 'u parser
   val many : 'a 'u parser -> ('a list) 'u parser
   val many1 : 'a 'u parser -> ('a list) 'u parser
   val chainl : 'a 'u parser -> ('a -> 'a -> 'a) 'u parser -> 'a 'u parser
@@ -95,6 +96,8 @@ end = struct
       | Some _ -> fail
       | None -> return ()
     ))
+
+  let choice ps = List.fold-left (<|>) fail ps
 
   let-rec many p = fun st -> st |> (
     many1 p <|> return []
