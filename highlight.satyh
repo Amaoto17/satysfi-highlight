@@ -59,6 +59,7 @@ end = struct
                   |> set-text-color txtcolor
             in
             let line-str = arabic !line in
+            let () = line <- !line + 1 in
             let content =
               inline-fil
                 ++ read-inline ctx-line (embed-string line-str)

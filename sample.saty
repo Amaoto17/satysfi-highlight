@@ -12,6 +12,8 @@ document (|
     +code(
 ```
 let dummy = ()
+
+and foo = ()
 ```
     );
   >

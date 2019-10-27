@@ -51,7 +51,7 @@ end = struct
 
 
   let rule-let ctx =
-    pattern ctx `let`
+    pattern ctx `let|and`
       |> capture 0 (token Keyword)
 
   let rule ctx = rule-let ctx

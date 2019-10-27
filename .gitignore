@@ -1,3 +1,4 @@
 _obsolete/
 *.pdf
 *aux
+.DS_Store

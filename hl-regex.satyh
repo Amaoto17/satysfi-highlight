@@ -7,11 +7,14 @@ open Parser
 type node =
   | Char of string
   | Concat of node list
+  | Alt of node * node
 
 
 type inst =
   | OpChar of string
   | OpMatch
+  | OpSplit of int * int
+  | OpJump of int
 
 
 type exec-ctx = (|
@@ -35,7 +38,7 @@ module Syntax : sig
 
 end = struct
 
-  let re-meta-char = ` `
+  let re-meta-char = `|`
 
   let item = none-of re-meta-char
 
@@ -51,8 +54,15 @@ end = struct
     ))
   )
 
+  let alt = fun st -> st |> run (
+    let alt-op =
+      char `|` >> return (fun t1 t2 -> Alt (t1, t2))
+    in
+    chainl seq alt-op
+  )
+
   let re = fun st -> st |> run (
-    seq << eof
+    alt << eof
   )
 
 end
@@ -64,9 +74,9 @@ module Exec : sig
 
 end = struct
 
-  let increment-pc =
+  let add-pc d =
     get-state >>= (fun ctx -> (
-      put-state (| ctx with pc = ctx#pc + 1 |)
+      put-state (| ctx with pc = ctx#pc + d |)
     ))
 
   let ensure len =
@@ -121,9 +131,19 @@ end = struct
       | Some inst -> return inst 
     ))
 
-  let-rec next = fun st -> run (
-    increment-pc >> exec
-  ) st
+  let-rec next = fun st -> st |> run (
+    add-pc 1 >> exec
+  )
+
+  and jump diff = fun st -> st |> run (
+    add-pc diff >> exec
+  )
+
+  and split d1 d2 = fun st -> (
+    match st |> jump d1 with
+    | Some x -> Some x
+    | None -> st |> jump d2
+  )
 
   and exec = fun st -> st |> run (
     fetch >>= (fun inst -> (
@@ -135,6 +155,10 @@ end = struct
       | OpMatch ->
           capture >>
           get-all-match
+      | OpSplit (d1, d2) ->
+          split d1 d2
+      | OpJump d ->
+          jump d
     ))
   )
 
@@ -166,6 +190,14 @@ end = struct
           [OpChar c]
       | Concat node-list ->
           List.map iter node-list |> List.concat
+      | Alt (t1, t2) ->
+          let code-t1 = iter t1 in
+          let code-t2 = iter t2 in
+          let len-t1 = List.length code-t1 in
+          let len-t2 = List.length code-t2 in
+          List.append
+            (OpSplit (1, len-t1 + 2) :: code-t1)
+            (OpJump (len-t2 + 1) :: code-t2)
     in
     let inst-seq = List.append (iter ast) [OpMatch] in
     Exec.run inst-seq
