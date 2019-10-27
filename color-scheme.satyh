@@ -1,0 +1,25 @@
+@require: color
+@import: hl-token
+
+
+module ColorScheme: sig
+
+  val foreground : color
+  val set-color-of : token -> context -> context
+
+end = struct
+
+  let red   = Color.rgb 0.62 0.00 0.17
+  let green = Color.rgb 0.32 0.52 0.09
+
+  let foreground = Color.gray 0.18
+
+  let set-color-of token ctx =
+    let color =
+      match token with
+      | Keyword -> red
+      | NumericConstant -> green
+    in
+    ctx |> set-text-color color
+
+end

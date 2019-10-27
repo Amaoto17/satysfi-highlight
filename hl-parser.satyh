@@ -1,0 +1,164 @@
+@require: option
+
+
+type 'u state = (|
+  src : string;
+  offset : int;
+  user-state : 'u;
+|)
+
+type 'a 'u parser = 'u state -> ('a * 'u state) option
+
+module Parser : sig
+
+  val return : 'a -> 'a 'u parser
+  val (>>=) : 'a 'u parser -> ('a -> 'b 'u parser) -> 'b 'u parser
+  val (>>) : 'a 'u parser -> 'b 'u parser -> 'b 'u parser
+  val (<<) : 'a 'u parser -> 'b 'u parser -> 'a 'u parser
+  val (<|>) : 'a 'u parser -> 'a 'u parser -> 'a 'u parser
+  val run : 'a 'u parser -> 'u state -> ('a * 'u state) option
+  val parse : 'u -> 'a 'u parser -> string -> ('a * 'u state) option
+  val easy-parse : 'a unit parser -> string -> 'a option
+  val get : ('u state) 'u parser
+  val get-state : 'u 'u parser
+  val put : 'u state -> unit 'u parser
+  val put-state : 'u -> unit 'u parser
+  val fail : 'a 'u parser
+  val current-pos : int 'u parser
+  val map : ('a -> 'b) -> 'a 'u parser -> 'b 'u parser
+  val look-ahead : 'a 'u parser -> 'a 'u parser
+  val not-followed-by : 'a 'u parser -> unit 'u parser
+  val many : 'a 'u parser -> ('a list) 'u parser
+  val many1 : 'a 'u parser -> ('a list) 'u parser
+  val chainl : 'a 'u parser -> ('a -> 'a -> 'a) 'u parser -> 'a 'u parser
+  val satisfy : (string -> bool) -> string 'u parser
+  val any : string 'u parser
+  val eof : unit 'u parser
+  val char : string -> string 'u parser
+  val none-of : string -> string 'u parser
+
+end = struct
+
+  let return x st = Some (x, st)
+
+  let bind m f = fun st ->
+    Option.bind (m st) (fun (v, st1) -> (f v) st1)
+
+  let (>>=) = bind
+
+  let (>>) p1 p2 = p1 >>= (fun _ -> p2)
+
+  let (<<) p1 p2 = p1 >>= (fun x -> p2 >> return x)
+
+  let (<|>) p1 p2 = fun st -> (
+    match p1 st with
+    | None -> p2 st
+    | Some x -> Some x
+  )
+
+  let run p st = p st
+
+  let parse ust p src =
+    p (| src = src; offset = 0; user-state = ust |)
+
+  let easy-parse p src =
+    parse () p src |> Option.map (fun (v, _) -> v)
+
+  let get = fun st -> Some (st, st)
+
+  let get-state = fun st -> Some (st#user-state, st)
+
+  let put st = fun _ -> Some ((), st)
+
+  let put-state ust =
+    get >>= (fun st -> (
+      put (| st with user-state = ust |)
+    ))
+
+  let fail st = None
+
+  let current-pos = fun st -> st |> (
+    return st#offset
+  )
+
+  let map f p = p >>= (fun x -> return (f x))
+
+  let look-ahead p = fun st -> (
+    match p st with
+    | Some (x, _) -> Some (x, st)
+    | None -> None
+  )
+
+  let not-followed-by p =
+    get >>= (fun st -> (
+      match (look-ahead p) st with
+      | Some _ -> fail
+      | None -> return ()
+    ))
+
+  let-rec many p = fun st -> st |> (
+    many1 p <|> return []
+  )
+
+  and many1 p = fun st -> st |> (
+    p >>= (fun x -> (
+      many p >>= (fun xs -> (
+        return (x :: xs)
+      ))
+    ))
+  )
+
+  let chainl p op =
+    let-rec iter acc =
+      let aux =
+        op >>= (fun f -> (
+          p >>= (fun x -> (
+            iter (f acc x)
+          ))
+        ))
+      in
+      aux <|> return acc
+    in
+    p >>= iter
+
+  let uncons st len =
+    let srclen = string-length st#src in
+    if st#offset + len > srclen then None
+    else
+      let elem = string-sub st#src st#offset len in
+      let st1 = (| st with offset = st#offset + len |) in
+      Some (elem, st1)
+
+  let satisfy f =
+    get >>= (fun st -> (
+      match uncons st 1 with
+      | None -> fail
+      | Some (elem, st1) ->
+          if f elem then put st1 >> return elem
+          else fail
+    ))
+
+  let any = fun st -> st |> (
+    satisfy (fun _ -> true)
+  )
+
+  let eof = fun st -> st |> (
+    not-followed-by any
+  )
+
+  let char c = satisfy (string-same c)
+
+  let string-contains s c =
+    let len = string-length s in
+    let-rec iter k =
+      if k >= len then false
+      else
+        let c1 = string-sub s k 1 in
+        if string-same c c1 then true
+        else iter (k + 1)
+    in
+    iter 0
+
+  let none-of s = satisfy (fun c -> not (string-contains s c))
+
+end

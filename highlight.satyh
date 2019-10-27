@@ -1,0 +1,78 @@
+@require: vdecoset
+@require: deco
+@import: color-scheme
+@import: syntax-ocaml
+@import: hl-parser
+
+
+module Highlight : sig
+
+  direct +code : [string] block-cmd
+
+end = struct
+
+  let syntax-highlight ctx code =
+    SyntaxOcaml.scan ctx code
+
+
+  let decoset-code = VDecoSet.empty
+
+  let set-code-font ctx =
+    ctx |> set-font Latin (`lmmono`, 1., 0.)
+        |> set-hyphen-penalty 100000
+
+  let scheme decoset txtcolor ctx code =
+    let pads = (0pt, 0pt, 8pt, 8pt) in
+    block-frame-breakable ctx pads decoset (fun ctx -> (
+      let fontsize = get-font-size ctx in
+      let ctx = ctx |> set-code-font in
+      let charwid = get-natural-width (read-inline ctx {0}) in
+      let ctx-code =
+        ctx |> set-space-ratio (charwid /' fontsize) 0. 0.
+            |> set-text-color txtcolor
+      in
+      let lstraw = split-into-lines code in
+      let lst =
+        match lstraw with
+        | []        -> lstraw
+        | x :: []   -> lstraw
+        | _ :: tail -> tail
+      in
+      let ib-code =
+        let-mutable line <- 1 in
+        lst |> List.fold-left-adjacent (fun ibacc (i, s) _ optnext -> (
+          let ib-last =
+            match optnext with
+            | Some _ -> inline-fil ++ discretionary 0 (inline-skip ((get-text-width ctx) *' 2.)) inline-nil inline-nil
+            | None   -> inline-fil
+          in
+          let ib =
+            inline-skip (charwid *' (float i))
+              ++ syntax-highlight ctx-code s
+              ++ ib-last
+          in
+          let ib-line =
+            let pads = (0pt, 0pt, 0pt, 0pt) in
+            let ctx-line =
+              ctx |> set-font-size 6pt
+                  |> set-manual-rising 1.5pt
+                  |> set-text-color txtcolor
+            in
+            let line-str = arabic !line in
+            let content =
+              inline-fil
+                ++ read-inline ctx-line (embed-string line-str)
+                ++ inline-skip (charwid *' 6.)
+            in
+            inline-frame-fixed (charwid *' 12.) pads Deco.empty content
+          in
+          ibacc ++ ib-line ++ ib
+        )) inline-nil
+      in
+      line-break true true ctx ib-code
+    ))
+
+  let-block ctx +code code =
+    scheme decoset-code ColorScheme.foreground ctx code
+
+end

@@ -1,0 +1,178 @@
+@require: option
+@import: hl-parser
+
+open Parser
+
+
+type node =
+  | Char of string
+  | Concat of node list
+
+
+type inst =
+  | OpChar of string
+  | OpMatch
+
+
+type exec-ctx = (|
+  inst-seq : inst list;
+  pc : int;
+  pos-stack : int list;
+  matched : string list;
+|)
+
+let exec-ctx-init = (|
+  inst-seq = [];
+  pc = 0;
+  pos-stack = [];
+  matched = [];
+|)
+
+
+module Syntax : sig
+
+  val re : node 'u parser
+
+end = struct
+
+  let re-meta-char = ` `
+
+  let item = none-of re-meta-char
+
+  let primary = fun st -> st |> run (
+    item >>= (fun c ->
+      return (Char c)
+    )
+  )
+
+  let seq = fun st -> st |> run (
+    many primary >>= (fun ts -> (
+      return (Concat ts)
+    ))
+  )
+
+  let re = fun st -> st |> run (
+    seq << eof
+  )
+
+end
+
+
+module Exec : sig
+
+  val run : inst list -> (string list) exec-ctx parser
+
+end = struct
+
+  let increment-pc =
+    get-state >>= (fun ctx -> (
+      put-state (| ctx with pc = ctx#pc + 1 |)
+    ))
+
+  let ensure len =
+    get >>= (fun st -> (
+      let srclen = string-length st#src in
+      if st#offset + len <= srclen then return ()
+      else fail
+    ))
+
+  let match1 c =
+    char c >> return ()
+
+  let get-all-match =
+    get-state >>= (fun ctx -> (
+      return ctx#matched
+    ))
+
+  let add-match s =
+    get-state >>= (fun ctx -> (
+      put-state (| ctx with matched = s :: ctx#matched |)
+    ))
+
+  let push-current-pos =
+    current-pos >>= (fun pos -> (
+      get-state >>= (fun ctx -> (
+        put-state (| ctx with pos-stack = pos :: ctx#pos-stack |)
+      ))
+    ))
+
+  let pop-pos =
+    get-state >>= (fun ctx -> (
+      match ctx#pos-stack with
+      | [] -> fail
+      | pos :: rest ->
+          put-state (| ctx with pos-stack = rest |) >>
+          return pos
+    ))
+
+  let capture =
+    get >>= (fun st -> (
+      pop-pos >>= (fun pos -> (
+        let curpos = st#offset in
+        let sub = string-sub st#src pos (curpos - pos) in
+        add-match sub
+      ))
+    ))
+
+  let fetch =
+    get-state >>= (fun ctx -> (
+      match List.nth ctx#pc ctx#inst-seq with
+      | None -> fail
+      | Some inst -> return inst 
+    ))
+
+  let-rec next = fun st -> run (
+    increment-pc >> exec
+  ) st
+
+  and exec = fun st -> st |> run (
+    fetch >>= (fun inst -> (
+      match inst with
+      | OpChar c ->
+          ensure 1 >>
+          match1 c >>
+          next
+      | OpMatch ->
+          capture >>
+          get-all-match
+    ))
+  )
+
+  let run inst-seq =
+    let ctx = (| exec-ctx-init with inst-seq = inst-seq |) in
+    put-state ctx >>
+    push-current-pos >>
+    exec |> map (fun matched -> (
+      match matched with
+      | [] -> []
+      | x :: xs -> x :: List.reverse xs
+    ))
+
+end
+
+
+module Regex : sig
+
+  val compile : string -> (string list) exec-ctx parser
+
+end = struct
+
+  let dummy = ()
+
+  let build ast =
+    let-rec iter node =
+      match node with
+      | Char c ->
+          [OpChar c]
+      | Concat node-list ->
+          List.map iter node-list |> List.concat
+    in
+    let inst-seq = List.append (iter ast) [OpMatch] in
+    Exec.run inst-seq
+
+  let compile pat =
+    match easy-parse Syntax.re pat with
+    | Some ast -> build ast
+    | None -> fail
+
+end
