@@ -26,6 +26,8 @@ type inst =
   | OpMatch
   | OpSplit of int * int
   | OpJump of int
+  | OpAtomicExec of int * int
+  | OpStop
 
 
 type exec-ctx = (|
@@ -78,7 +80,7 @@ end = struct
   )
 
   and seq = fun st -> st |> run (
-    many primary >>= (fun ts -> (
+    many rep >>= (fun ts -> (
       return (Concat ts)
     ))
   )
@@ -202,6 +204,11 @@ end = struct
           split pc1 pc2
       | OpJump pc ->
           jump pc
+      | OpAtomicExec (pc1, pc2) ->
+          jump pc1 >>
+          jump pc2
+      | OpStop ->
+          return []
     ))
   )
 
@@ -250,6 +257,47 @@ end = struct
           let () = iter t2 in
           let () = set-split (OpSplit (t1-begin, t2-begin)) in
           set-jump (OpJump (curpos ()))
+      | Opt (quantity, t) ->
+          let emitter () =
+            let set-split = reserve () in
+            let t-begin = curpos () in
+            let () = iter t in
+            (set-split, t-begin)
+          in
+          emit-quantify emitter quantity
+      | Many (quantity, t) ->
+          let emitter () =
+            let loop-begin = curpos () in
+            let set-split = reserve () in
+            let t-begin = curpos () in
+            let () = iter t in
+            let () = emit (OpJump loop-begin) in
+            (set-split, t-begin)
+          in
+          emit-quantify emitter quantity
+      | Many1 (quantity, t) ->
+          let emitter () =
+            let t-begin = curpos () in
+            let () = iter t in
+            let set-split = reserve () in
+            (set-split, t-begin)
+          in
+          emit-quantify emitter quantity
+    and emit-quantify emitter quantity =
+      match quantity with
+      | Greedy ->
+          let (set-split, t-begin) = emitter () in
+          set-split (OpSplit (t-begin, curpos ()))
+      | Reluctant ->
+          let (set-split, t-begin) = emitter () in
+          set-split (OpSplit (curpos (), t-begin))
+      | Possessive ->
+          let set-atomic-exec = reserve () in
+          let loop-begin = curpos () in
+          let (set-split, t-begin) = emitter () in
+          let () = set-split (OpSplit (t-begin, curpos ())) in
+          let () = emit OpStop in
+          set-atomic-exec (OpAtomicExec (loop-begin, curpos ()))
     in
     let () = iter ast in
     let () = emit OpMatch in

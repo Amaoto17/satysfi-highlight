@@ -54,7 +54,15 @@ end = struct
     pattern ctx `let|and`
       |> capture 0 (token Keyword)
 
-  let rule ctx = rule-let ctx
+  let rule-integer ctx =
+    pattern ctx `1+`
+      |> capture 0 (token NumericConstant)
+
+  let rule ctx =
+    choice [
+      rule-let ctx
+    ; rule-integer ctx
+    ]
 
   let scan ctx code =
     match parse exec-ctx-init (rule ctx) code with
