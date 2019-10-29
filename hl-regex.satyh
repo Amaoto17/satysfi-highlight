@@ -30,6 +30,7 @@ type node =
   | Satisfy of string -> bool
   | LookAhead of node
   | Anchor of anchor
+  | BackRef of int
 
 
 type inst =
@@ -46,6 +47,7 @@ type inst =
   | OpSatisfy of string -> bool
   | OpAttempt of int * int
   | OpAnchor of anchor
+  | OpBackRef of int
 
 
 type exec-ctx = (|
@@ -88,16 +90,6 @@ module CharClass : sig
   val parse : (string -> bool) unit parser
 
 end = struct
-
-  let string-index s init-pos c =
-    let-rec iter k =
-      if k == string-length s then -1
-      else
-        let c1 = string-sub s k 1 in
-        if string-same c1 c then k else iter (k + 1)
-    in
-    iter init-pos
-
 
   let lower = `abcdefghijklmnopqrstuvwxyz`
   let upper = `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
@@ -260,6 +252,9 @@ end = struct
     ; backslash-anchor >>= (fun kind -> (
         return (Anchor kind)
       ))
+    ; decimal >>= (fun n -> (
+        return (BackRef n)
+      ))
     ; any >>= (fun c -> (
         return (Char c)
       ))
@@ -371,6 +366,13 @@ end = struct
   let match1p pred =
     satisfy pred >> return ()
 
+  let get-nth-match n =
+    get-state >>= (fun ctx -> (
+      let len = List.length ctx#matched in
+      let submatch = Option.from None (List.nth (len - 1 - n) ctx#matched) in
+      return submatch
+    ))
+
   let get-all-match =
     get-state >>= (fun ctx -> (
       let matched = List.map (Option.from (0, 0, ` `)) ctx#matched in
@@ -426,6 +428,13 @@ end = struct
     | EndOfLine -> eof
     | WordBoundary -> word-boundary
     | NonWordBoundary -> non-word-boundary
+
+  let back-ref n =
+    get-nth-match n >>= (fun submatch-opt -> (
+      match submatch-opt with
+      | None -> fail
+      | Some (_, _, s) -> string s >> return ()
+    ))
 
   let fetch =
     get-state >>= (fun ctx -> (
@@ -493,6 +502,9 @@ end = struct
           attempt pc1 pc2
       | OpAnchor kind ->
           anchor kind >>
+          next
+      | OpBackRef n ->
+          back-ref n >>
           next
     ))
   )
@@ -585,6 +597,8 @@ end = struct
           set-attempt (OpAttempt (t-begin, curpos ()))
       | Anchor kind ->
           emit (OpAnchor kind)
+      | BackRef n ->
+          emit (OpBackRef n)
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->

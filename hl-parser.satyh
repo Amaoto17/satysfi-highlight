@@ -43,6 +43,7 @@ module Parser : sig
   val non-word-boundary : unit 'u parser
   val char : string -> string 'u parser
   val none-of : string -> string 'u parser
+  val decimal : int 'u parser
 
 end = struct
 
@@ -198,5 +199,14 @@ end = struct
   let char c = satisfy (string-same c)
 
   let none-of s = satisfy (fun c -> not (string-contains s c))
+
+  let digits p base =
+    let digit = p |> map (string-index `0123456789` 0) in
+    let f acc x = acc * base + x in
+    many1 digit |> map (List.fold-left f 0)
+
+  let digit-char = satisfy is-digit
+
+  let decimal st = st |> digits digit-char 10
 
 end

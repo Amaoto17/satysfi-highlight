@@ -9,6 +9,15 @@ let string-contains s c =
   in
   iter 0
 
+let string-index s init-pos c =
+  let-rec iter k =
+    if k == string-length s then -1
+    else
+      let c1 = string-sub s k 1 in
+      if string-same c1 c then k else iter (k + 1)
+  in
+  iter init-pos
+
 let negate pred x = not (pred x)
 
 let list-make n init =
