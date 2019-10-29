@@ -11,11 +11,13 @@ document (|
   +section{OCamlでの例} <
     +code(
 ```
-let dummy = ()
+let bar = 1
+
+let rec dummy = ()
 
 and foo = ()
 
-11111
+0123456789
 
 abcdefghij
 

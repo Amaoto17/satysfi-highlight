@@ -4,3 +4,4 @@ type token =
   | EscapeChar
   | String
   | Comment
+  | FunctionName

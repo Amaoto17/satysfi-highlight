@@ -61,6 +61,13 @@ let control-char =
 let shorthand =
   choice [
     char `w` >> return is-word-char
+  ; char `W` >> return (negate is-word-char)
+  ; char `d` >> return is-digit
+  ; char `D` >> return (negate is-digit)
+  ; char `s` >> return is-space
+  ; char `S` >> return (negate is-space)
+  ; char `h` >> return is-hex-digit
+  ; char `H` >> return (negate is-hex-digit)
   ]
 
 
@@ -232,10 +239,26 @@ end = struct
     ] << char `)`
   )
 
+  and escaped = fun st -> st |> run (
+    char `\` >>
+    choice [
+      control-char >>= (fun c -> (
+        return (Char c)
+      ))
+    ; shorthand >>= (fun pred -> (
+        return (Satisfy pred)
+      ))
+    ; any >>= (fun c -> (
+        return (Char c)
+      ))
+    ]
+  )
+
   and primary = fun st -> st |> run (
     choice [
       paren
     ; char-class
+    ; escaped
     ; item >>= (fun c ->
         return (Char c)
       )

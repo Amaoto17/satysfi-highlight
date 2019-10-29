@@ -9,10 +9,11 @@ module ColorScheme: sig
 
 end = struct
 
-  let red   = Color.rgb 0.62 0.00 0.17
-  let green = Color.rgb 0.32 0.52 0.09
-  let blue =  Color.rgb 0.13 0.36 0.52
-  let gray =  Color.rgb 0.48 0.48 0.48
+  let red    = Color.rgb 0.62 0.00 0.17
+  let green  = Color.rgb 0.32 0.52 0.09
+  let blue   = Color.rgb 0.13 0.36 0.52
+  let yellow = Color.rgb 0.64 0.51 0.02
+  let gray   = Color.rgb 0.48 0.48 0.48
 
   let foreground = Color.gray 0.18
 
@@ -23,5 +24,6 @@ end = struct
     | EscapeChar -> blue
     | String -> green
     | Comment -> gray
+    | FunctionName -> yellow
 
 end

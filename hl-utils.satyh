@@ -26,4 +26,4 @@ let is-lower = string-contains `abcdefghijklmnopqrstuvwxyz`
 let is-letter c = is-upper c || is-lower c
 let is-alpha-num c = is-letter c || is-digit c
 let is-word-char c = is-alpha-num c || string-same c `_`
-let is-space c = string-contains #` `#
+let is-space c = string-contains #` `# c
