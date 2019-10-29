@@ -87,7 +87,7 @@ end = struct
       |> capture 0 (token Keyword)
 
   let rule-test7 =
-    pattern `A\B`
+    pattern `A\B.*`
       |> capture 0 (token Keyword)
 
   let rule =

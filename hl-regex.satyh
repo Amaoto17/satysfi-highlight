@@ -20,6 +20,7 @@ type anchor =
 
 type node =
   | Char of string
+  | Any
   | Concat of node list
   | Alt of node * node
   | Opt of quantity * node
@@ -35,6 +36,7 @@ type inst =
   | OpEmpty
   | OpChar of string
   | OpMatch
+  | OpAny
   | OpSplit of int * int
   | OpJump of int
   | OpAtomicExec of int * int
@@ -231,7 +233,7 @@ module Syntax : sig
 
 end = struct
 
-  let re-meta-char = `|?*+()[]^$`
+  let re-meta-char = `|?*+()[]^$.\`
 
   let item = none-of re-meta-char
 
@@ -265,7 +267,8 @@ end = struct
 
   let single-meta =
     choice [
-      char `^` >> return (Anchor (BeginningOfLine))
+      char `.` >> return Any
+    ; char `^` >> return (Anchor (BeginningOfLine))
     ; char `$` >> return (Anchor (EndOfLine))
     ]
 
@@ -362,6 +365,9 @@ end = struct
   let match1 c =
     char c >> return ()
 
+  let any1 =
+    any >> return ()
+
   let match1p pred =
     satisfy pred >> return ()
 
@@ -457,6 +463,10 @@ end = struct
           ensure 1 >>
           match1 c >>
           next
+      | OpAny ->
+          ensure 1 >>
+          any1 >>
+          next
       | OpMatch ->
           capture 0 >>
           get-all-match
@@ -520,6 +530,8 @@ end = struct
       match node with
       | Char c ->
           emit (OpChar c)
+      | Any ->
+          emit OpAny
       | Concat node-list ->
           List.iter iter node-list
       | Alt (t1, t2) ->

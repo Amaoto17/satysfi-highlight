@@ -35,7 +35,7 @@ int
 !!abcdef
 
 A?
-ABC
+ABC::def
 ```
     );
   >
