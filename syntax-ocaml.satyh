@@ -102,19 +102,24 @@ end = struct
     pattern `(?!X)[A-Z]+`
       |> capture 0 (token Keyword)
 
+  let rule-test11 =
+    pattern `A{5}$|B{2,}$|C{,4}$|D{2,3}$`
+      |> capture 0 (token Keyword)
+
   let rule =
     choice [
       rule-let
-    ; rule-test1
-    ; rule-test2
-    ; rule-test3
-    ; rule-test4
-    ; rule-test5
-    ; rule-test6
-    ; rule-test7
-    ; rule-test8
-    ; rule-test9
-    ; rule-test10
+    % ; rule-test1
+    % ; rule-test2
+    % ; rule-test3
+    % ; rule-test4
+    % ; rule-test5
+    % ; rule-test6
+    % ; rule-test7
+    % ; rule-test8
+    % ; rule-test9
+    % ; rule-test10
+    ; rule-test11
     ]
 
   let take-item-list-subset rpos item-list =

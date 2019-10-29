@@ -20,6 +20,9 @@ let string-index s init-pos c =
 
 let negate pred x = not (pred x)
 
+let-rec for n f =
+  if n == 0 then () else let () = f () in for (n - 1) f
+
 let list-make n init =
   let-rec iter acc k =
     if k == n then acc

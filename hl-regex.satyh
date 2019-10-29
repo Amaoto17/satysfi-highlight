@@ -17,6 +17,12 @@ type anchor =
   | WordBoundary
   | NonWordBoundary
 
+type repeat =
+  | Just of int
+  | AtLeast of int
+  | AtMost of int
+  | Between of int * int
+
 
 type node =
   | Char of string
@@ -32,6 +38,7 @@ type node =
   | NegLookAhead of node
   | Anchor of anchor
   | BackRef of int
+  | Repeat of repeat * quantity * node
 
 
 type inst =
@@ -302,6 +309,27 @@ end = struct
     ]
   )
 
+  and rep-times t =
+    char `{` >>
+    choice [
+      char `,` >>
+      decimal >>= (fun n -> (
+        return (AtMost n)
+      ))
+    ; decimal >>= (fun m -> (
+        choice [
+          char `,` >>
+          choice [
+            decimal >>= (fun n -> (
+              return (Between (m, n))
+            ))
+          ; return (AtLeast m)
+          ]
+        ; return (Just m)
+        ]
+      ))
+    ] << char `}`
+
   and quantifier builder =
     choice [
       char `?` >> return (builder Reluctant)
@@ -315,6 +343,9 @@ end = struct
         char `?` >> quantifier (fun q -> Opt (q, t))
       ; char `*` >> quantifier (fun q -> Many (q, t))
       ; char `+` >> quantifier (fun q -> Many1 (q, t))
+      ; rep-times t >>= (fun kind -> (
+          quantifier (fun q -> Repeat (kind, q, t))
+        ))
       ; return t
       ]
     ))
@@ -619,6 +650,20 @@ end = struct
           emit (OpAnchor kind)
       | BackRef n ->
           emit (OpBackRef n)
+      | Repeat (kind, quantity, t) -> (
+          match kind with
+          | Just n ->
+              for n (fun _ -> iter t)
+          | AtLeast n ->
+              let () = for n (fun _ -> iter t) in
+              iter (Many (quantity, t))
+          | AtMost n ->
+              for n (fun _ -> iter (Opt (quantity, t)))
+          | Between (m, n) ->
+              let () = for m (fun _ -> iter t) in
+              for (n - m) (fun _ -> iter (Opt (quantity, t)))
+
+        )
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->
