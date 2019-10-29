@@ -21,6 +21,7 @@ type node =
   | Many1 of quantity * node
   | Group of node
   | Satisfy of string -> bool
+  | LookAhead of node
 
 
 type inst =
@@ -34,6 +35,7 @@ type inst =
   | OpSaveStart
   | OpSaveEnd of int
   | OpSatisfy of string -> bool
+  | OpAttempt of int * int
 
 
 type exec-ctx = (|
@@ -235,7 +237,11 @@ end = struct
     choice [
       char `?` >>
         choice [
-          char `:` >> alt
+          char `=` >>
+          alt >>= (fun t -> (
+            return (LookAhead t)
+          ))
+        ; char `:` >> alt
         ]
     ; alt >>= (fun t -> (
         return (Group t)
@@ -340,7 +346,6 @@ end = struct
     get-state >>= (fun ctx -> (
       let matched = List.map (Option.from (0, 0, ` `)) ctx#matched in
       return (List.reverse matched)
-      % return ctx#matched
     ))
 
   let list-nth-set n elem lst =
@@ -358,14 +363,12 @@ end = struct
       let len = List.length ctx#matched in
       let matched = list-nth-set (len - 1 - n) (Some (bpos, epos, s)) ctx#matched in
       put-state (| ctx with matched = matched |)
-      % put-state (| ctx with matched = (bpos, epos, s) :: ctx#matched |)
     ))
 
   let push-current-pos =
     current-pos >>= (fun pos -> (
       get-state >>= (fun ctx -> (
         let pos-stack = pos :: ctx#pos-stack in
-        % let matched = None :: ctx#matched in
         put-state (| ctx with pos-stack = pos-stack |)
       ))
     ))
@@ -385,16 +388,8 @@ end = struct
         let curpos = st#offset in
         let sub = string-sub st#src pos (curpos - pos) in
         set-match n pos curpos sub
-        % add-match pos curpos sub
       ))
     ))
-
-  % let fetch =
-  %   get-state >>= (fun ctx -> (
-  %     match List.nth ctx#pc ctx#inst-seq with
-  %     | None -> fail
-  %     | Some inst -> return inst 
-  %   ))
 
   let fetch =
     get-state >>= (fun ctx -> (
@@ -415,6 +410,12 @@ end = struct
     match st |> jump pc1 with
     | Some x -> Some x
     | None -> st |> jump pc2
+  )
+
+  and attempt pc1 pc2 = fun st -> (
+    match st |> jump pc1 with
+    | Some _ -> st |> jump pc2
+    | None -> None
   )
 
   and exec = fun st -> st |> run (
@@ -448,6 +449,8 @@ end = struct
           ensure 1 >>
           match1p pred >>
           next
+      | OpAttempt (pc1, pc2) ->
+          attempt pc1 pc2
     ))
   )
 
@@ -529,6 +532,12 @@ end = struct
           emit (OpSaveEnd n)
       | Satisfy pred ->
           emit (OpSatisfy pred)
+      | LookAhead t ->
+          let set-attempt = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-attempt (OpAttempt (t-begin, curpos ()))
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->

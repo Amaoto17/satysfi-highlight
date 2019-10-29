@@ -54,9 +54,9 @@ end = struct
       |> capture 1 (token Keyword)
       |> capture 2 (token FunctionName)
 
-  let rule-integer =
-    pattern `\d+`
-      |> capture 0 (token NumericConstant)
+  % let rule-integer =
+  %   pattern `\d+`
+  %     |> capture 0 (token NumericConstant)
 
   let rule-test1 =
     pattern `ab(cd(ef)gh)(ij)`
@@ -74,13 +74,18 @@ end = struct
       |> capture 1 (token EscapeChar)
       |> capture 2 (token Keyword)
 
+  let rule-test4 =
+    pattern `(?=0)\d+`
+      |> capture 0 (token Keyword)
+
   let rule =
     choice [
       rule-let
-    ; rule-integer
+    % ; rule-integer
     ; rule-test1
     ; rule-test2
     ; rule-test3
+    ; rule-test4
     ]
 
   let take-item-list-subset rpos item-list =
