@@ -126,7 +126,7 @@ end = struct
         )
       | Class t -> iter t
       | Shorthand pred -> pred
-      | Not t -> fun x -> not (iter t x)
+      | Not t -> negate (iter t)
       | Prod (t1, t2) -> fun x -> iter t1 x && iter t2 x
       | Union (t1, t2) -> fun x -> iter t1 x || iter t2 x
     in
@@ -282,7 +282,7 @@ end
 
 module Exec : sig
 
-  val run : inst Vec.vec -> ((int * int * string) list) exec-ctx parser
+  val run : inst Vec.vec -> int -> ((int * int * string) list) exec-ctx parser
 
 end = struct
 
@@ -338,8 +338,8 @@ end = struct
     current-pos >>= (fun pos -> (
       get-state >>= (fun ctx -> (
         let pos-stack = pos :: ctx#pos-stack in
-        let matched = None :: ctx#matched in
-        put-state (| ctx with pos-stack = pos-stack; matched = matched |)
+        % let matched = None :: ctx#matched in
+        put-state (| ctx with pos-stack = pos-stack |)
       ))
     ))
 
@@ -424,8 +424,12 @@ end = struct
     ))
   )
 
-  let run inst-seq =
-    let ctx = (| exec-ctx-init with inst-seq = inst-seq |) in
+  let run inst-seq n-save =
+    let ctx = (|
+      exec-ctx-init with
+        inst-seq = inst-seq;
+        matched = list-make (n-save + 1) None;
+    |) in
     put-state ctx >>
     push-current-pos >>
     exec
@@ -516,7 +520,7 @@ end = struct
     in
     let () = iter ast in
     let () = emit OpMatch in
-    Exec.run !inst-seq
+    Exec.run !inst-seq !n-save
 
   let compile pat =
     match easy-parse Syntax.re pat with

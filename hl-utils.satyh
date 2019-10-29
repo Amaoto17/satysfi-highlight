@@ -9,6 +9,15 @@ let string-contains s c =
   in
   iter 0
 
+let negate pred x = not (pred x)
+
+let list-make n init =
+  let-rec iter acc k =
+    if k == n then acc
+    else iter (init :: acc) (k + 1)
+  in
+  iter [] 0
+
 let is-digit = string-contains `0123456789`
 let is-oct-digit = string-contains `01234567`
 let is-hex-digit = string-contains `0123456789abcdefABCDEF`

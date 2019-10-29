@@ -65,8 +65,13 @@ end = struct
       |> capture 3 (token Comment)
 
   let rule-test2 =
-    pattern `[a-d&&[^b]]*`
+    pattern `[a-d&&[^b]]+`
       |> capture 0 (token String)
+
+  let rule-test3 =
+    pattern `(!abc)|(!def)`
+      |> capture 1 (token EscapeChar)
+      |> capture 2 (token Keyword)
 
   let rule =
     choice [
@@ -74,6 +79,7 @@ end = struct
     ; rule-integer
     ; rule-test1
     ; rule-test2
+    ; rule-test3
     ]
 
   let take-item-list-subset rpos item-list =
@@ -117,11 +123,11 @@ end = struct
         let ctx = ctx |> set-text-color-opt color-opt in
         iter ctx inline-nil bpos epos rest
 
-  let print-item-list item-list =
+  let print-item-list ctx item-list =
     let-rec iter acc lst =
       match lst with
       | [] -> acc
-      | (bpos, epos, ctx) :: rest ->
+      | (bpos, epos, _) :: rest ->
           let s = `[` ^ arabic bpos ^ `,` ^ arabic epos ^ `]` in
           let ib = read-inline ctx (embed-string s) in
           iter (acc ++ ib) rest
@@ -133,9 +139,8 @@ end = struct
     | None ->
         read-inline ctx (embed-string code)
     | Some (item-list, st) ->
-        % let ib = inline-nil in
         let ib = build-colored-ib ctx st#src item-list in
-        % let ib = print-item-list item-list in
+        % let ib = print-item-list ctx item-list in
         let ib-rest =
           let len = string-length st#src in
           let rest = string-sub st#src st#offset (len - st#offset) in
