@@ -78,6 +78,18 @@ end = struct
     pattern `(?=0)\d+`
       |> capture 0 (token Keyword)
 
+  let rule-test5 =
+    pattern `\bin\b`
+      |> capture 0 (token Keyword)
+
+  let rule-test6 =
+    pattern `^!!abcdef$`
+      |> capture 0 (token Keyword)
+
+  let rule-test7 =
+    pattern `A\B`
+      |> capture 0 (token Keyword)
+
   let rule =
     choice [
       rule-let
@@ -86,6 +98,9 @@ end = struct
     ; rule-test2
     ; rule-test3
     ; rule-test4
+    ; rule-test5
+    ; rule-test6
+    ; rule-test7
     ]
 
   let take-item-list-subset rpos item-list =

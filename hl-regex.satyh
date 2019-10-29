@@ -11,6 +11,12 @@ type quantity =
   | Reluctant
   | Possessive
 
+type anchor =
+  | BeginningOfLine
+  | EndOfLine
+  | WordBoundary
+  | NonWordBoundary
+
 
 type node =
   | Char of string
@@ -22,6 +28,7 @@ type node =
   | Group of node
   | Satisfy of string -> bool
   | LookAhead of node
+  | Anchor of anchor
 
 
 type inst =
@@ -36,6 +43,7 @@ type inst =
   | OpSaveEnd of int
   | OpSatisfy of string -> bool
   | OpAttempt of int * int
+  | OpAnchor of anchor
 
 
 type exec-ctx = (|
@@ -223,7 +231,7 @@ module Syntax : sig
 
 end = struct
 
-  let re-meta-char = `|?*+()`
+  let re-meta-char = `|?*+()[]^$`
 
   let item = none-of re-meta-char
 
@@ -231,6 +239,35 @@ end = struct
     CharClass.parse >>= (fun pred -> (
       return (Satisfy pred)
     ))
+
+  let backslash-anchor =
+    choice [
+      char `b` >> return WordBoundary
+    ; char `B` >> return NonWordBoundary
+    ]
+
+  let backslash =
+    char `\` >>
+    choice [
+      control-char >>= (fun c -> (
+        return (Char c)
+      ))
+    ; shorthand >>= (fun pred -> (
+        return (Satisfy pred)
+      ))
+    ; backslash-anchor >>= (fun kind -> (
+        return (Anchor kind)
+      ))
+    ; any >>= (fun c -> (
+        return (Char c)
+      ))
+    ]
+
+  let single-meta =
+    choice [
+      char `^` >> return (Anchor (BeginningOfLine))
+    ; char `$` >> return (Anchor (EndOfLine))
+    ]
 
   let-rec paren = fun st -> st |> run (
     char `(` >>
@@ -249,26 +286,12 @@ end = struct
     ] << char `)`
   )
 
-  and escaped = fun st -> st |> run (
-    char `\` >>
-    choice [
-      control-char >>= (fun c -> (
-        return (Char c)
-      ))
-    ; shorthand >>= (fun pred -> (
-        return (Satisfy pred)
-      ))
-    ; any >>= (fun c -> (
-        return (Char c)
-      ))
-    ]
-  )
-
   and primary = fun st -> st |> run (
     choice [
       paren
     ; char-class
-    ; escaped
+    ; backslash
+    ; single-meta
     ; item >>= (fun c ->
         return (Char c)
       )
@@ -391,6 +414,13 @@ end = struct
       ))
     ))
 
+  let anchor kind =
+    match kind with
+    | BeginningOfLine -> bof
+    | EndOfLine -> eof
+    | WordBoundary -> word-boundary
+    | NonWordBoundary -> non-word-boundary
+
   let fetch =
     get-state >>= (fun ctx -> (
       match Vec.get ctx#inst-seq ctx#pc with
@@ -451,6 +481,9 @@ end = struct
           next
       | OpAttempt (pc1, pc2) ->
           attempt pc1 pc2
+      | OpAnchor kind ->
+          anchor kind >>
+          next
     ))
   )
 
@@ -538,6 +571,8 @@ end = struct
           let () = iter t in
           let () = emit OpStop in
           set-attempt (OpAttempt (t-begin, curpos ()))
+      | Anchor kind ->
+          emit (OpAnchor kind)
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->

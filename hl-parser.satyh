@@ -38,6 +38,9 @@ module Parser : sig
   val string : string -> string 'u parser
   val any : string 'u parser
   val eof : unit 'u parser
+  val bof : unit 'u parser
+  val word-boundary : unit 'u parser
+  val non-word-boundary : unit 'u parser
   val char : string -> string 'u parser
   val none-of : string -> string 'u parser
 
@@ -93,12 +96,18 @@ end = struct
     | None -> None
   )
 
-  let not-followed-by p =
-    get >>= (fun st -> (
-      match (look-ahead p) st with
-      | Some _ -> fail
-      | None -> return ()
-    ))
+  let not-followed-by p = fun st -> (
+    match p st with
+    | Some _ -> None
+    | None -> Some ((), st)
+  )
+
+  let look-behind len p = fun st -> (
+    if st#offset < len then None
+    else
+      let st0 = (| st with offset = st#offset - len |) in
+      Option.map (fun (x, _) -> (x, st)) (p st0)
+  )
 
   let choice ps = List.fold-left (<|>) fail ps
 
@@ -162,6 +171,28 @@ end = struct
 
   let eof = fun st -> st |> (
     not-followed-by any
+  )
+
+  let bof st =
+    if st#offset == 0 then Some ((), st) else None
+
+  let word-char = satisfy is-word-char
+
+  let non-word-char = satisfy (negate is-word-char)
+
+  let skip p = p >> return ()
+
+  let word-boundary = fun st -> st |> (
+    choice [
+      bof <|> skip (look-behind 1 non-word-char) >>
+      skip (look-ahead word-char)
+    ; look-behind 1 word-char >>
+      eof <|> skip (look-ahead non-word-char)
+    ]
+  )
+
+  let non-word-boundary = fun st -> st |> (
+    not-followed-by word-boundary
   )
 
   let char c = satisfy (string-same c)
