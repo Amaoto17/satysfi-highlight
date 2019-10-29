@@ -12,7 +12,7 @@ module Highlight : sig
 end = struct
 
   let syntax-highlight ctx code =
-    SyntaxOcaml.scan ctx code
+    Syntax.scan ctx SyntaxOcaml.rule code
 
 
   let decoset-code = VDecoSet.empty

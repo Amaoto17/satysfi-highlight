@@ -1,0 +1,111 @@
+@import: hl-token
+@import: hl-parser
+@import: hl-regex
+
+
+type item = int * int * color option
+type rule = (item list) exec-ctx parser
+
+module Syntax : sig
+
+  val pattern : string -> rule
+  val capture : int -> (item -> item) -> rule -> rule
+  val token : token -> item -> item
+  val scan : context -> rule -> string -> inline-boxes
+
+end = struct
+
+  let pattern pat =
+    let p = Regex.compile pat in
+    p >>= (fun matched -> (
+      let elem-list = List.map (fun (bpos, epos, _) -> (bpos, epos, None)) matched in
+      return elem-list
+    ))
+
+  let list-nth-map n f lst =
+    let-rec iter k lst =
+      match lst with
+      | [] -> []
+      | x :: xs ->
+          if k == n then (f x) :: xs
+          else x :: iter (k + 1) xs
+    in
+    iter 0 lst
+
+  let capture n f t =
+    t >>= (fun item-list -> (
+      return (list-nth-map n f item-list)
+    ))
+
+  let token tok item =
+    let (bpos, epos, _) = item in
+    (bpos, epos, Some (ColorScheme.color-of tok))
+
+  let take-item-list-subset rpos item-list =
+    let-rec iter acc lst =
+      match lst with
+      | [] -> (List.reverse acc, [])
+      | item :: rest ->
+          let (_, epos, _) = item in
+          if epos <= rpos then iter (item :: acc) rest
+          else (List.reverse acc, lst)
+    in
+    iter [] item-list
+
+  let set-text-color-opt color-opt ctx =
+    match color-opt with
+    | None -> ctx
+    | Some color -> ctx |> set-text-color color
+
+  let build-colored-ib ctx src item-list =
+    let-rec iter ctx acc lpos rpos item-list =
+      match item-list with
+      | [] ->
+          let ib-rest =
+            if lpos == rpos then inline-nil
+            else read-inline ctx (embed-string (string-sub src lpos (rpos - lpos)))
+          in
+          acc ++ ib-rest
+      | (bpos, epos, color-opt) :: rest ->
+          let ib-left =
+            if lpos == bpos then inline-nil
+            else read-inline ctx (embed-string (string-sub src lpos (bpos - lpos)))
+          in
+          let (subset, rest1) = take-item-list-subset epos rest in
+          let ctx1 = ctx |> set-text-color-opt color-opt in
+          let ib-mid = iter ctx1 inline-nil bpos epos subset in
+          iter ctx (acc ++ ib-left ++ ib-mid) epos rpos rest1
+    in
+    match item-list with
+    | [] -> inline-nil
+    | (bpos, epos, color-opt) :: rest ->
+        let ctx = ctx |> set-text-color-opt color-opt in
+        iter ctx inline-nil bpos epos rest
+
+  % for debugging
+  let print-item-list ctx item-list =
+    let-rec iter acc lst =
+      match lst with
+      | [] -> acc
+      | (bpos, epos, _) :: rest ->
+          let s = `[` ^ arabic bpos ^ `,` ^ arabic epos ^ `]` in
+          let ib = read-inline ctx (embed-string s) in
+          iter (acc ++ ib) rest
+    in
+    iter inline-nil item-list
+
+  let scan ctx rule code =
+    match parse exec-ctx-init rule code with
+    | None ->
+        read-inline ctx (embed-string code)
+    | Some (item-list, st) ->
+        let ib = build-colored-ib ctx st#src item-list in
+        % let ib = print-item-list ctx item-list in
+        let ib-rest =
+          let len = string-length st#src in
+          let rest = string-sub st#src st#offset (len - st#offset) in
+          read-inline ctx (embed-string rest)
+        in
+        ib ++ ib-rest
+
+end

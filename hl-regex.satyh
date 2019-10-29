@@ -662,7 +662,6 @@ end = struct
           | Between (m, n) ->
               let () = for m (fun _ -> iter t) in
               for (n - m) (fun _ -> iter (Opt (quantity, t)))
-
         )
     and emit-quantify emitter quantity =
       match quantity with
