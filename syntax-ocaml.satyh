@@ -98,6 +98,10 @@ end = struct
     pattern `((12)|(34))\2`
       |> capture 0 (token Keyword)
 
+  let rule-test10 =
+    pattern `(?!X)[A-Z]+`
+      |> capture 0 (token Keyword)
+
   let rule =
     choice [
       rule-let
@@ -110,6 +114,7 @@ end = struct
     ; rule-test7
     ; rule-test8
     ; rule-test9
+    ; rule-test10
     ]
 
   let take-item-list-subset rpos item-list =

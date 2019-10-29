@@ -29,6 +29,7 @@ type node =
   | Group of node
   | Satisfy of string -> bool
   | LookAhead of node
+  | NegLookAhead of node
   | Anchor of anchor
   | BackRef of int
 
@@ -46,6 +47,7 @@ type inst =
   | OpSaveEnd of int
   | OpSatisfy of string -> bool
   | OpAttempt of int * int
+  | OpAttemptFail of int * int
   | OpAnchor of anchor
   | OpBackRef of int
 
@@ -276,6 +278,10 @@ end = struct
           alt >>= (fun t -> (
             return (LookAhead t)
           ))
+        ; char `!` >>
+          alt >>= (fun t -> (
+            return (NegLookAhead t)
+          ))
         ; char `:` >> alt
         ]
     ; alt >>= (fun t -> (
@@ -463,6 +469,12 @@ end = struct
     | None -> None
   )
 
+  and attempt-fail pc1 pc2 = fun st -> (
+    match st |> jump pc1 with
+    | None -> st |> jump pc2
+    | Some _ -> None
+  )
+
   and exec = fun st -> st |> run (
     fetch >>= (fun inst -> (
       match inst with
@@ -500,6 +512,8 @@ end = struct
           next
       | OpAttempt (pc1, pc2) ->
           attempt pc1 pc2
+      | OpAttemptFail (pc1, pc2) ->
+          attempt-fail pc1 pc2
       | OpAnchor kind ->
           anchor kind >>
           next
@@ -595,6 +609,12 @@ end = struct
           let () = iter t in
           let () = emit OpStop in
           set-attempt (OpAttempt (t-begin, curpos ()))
+      | NegLookAhead t ->
+          let set-attempt-fail = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-attempt-fail (OpAttemptFail (t-begin, curpos ()))
       | Anchor kind ->
           emit (OpAnchor kind)
       | BackRef n ->
