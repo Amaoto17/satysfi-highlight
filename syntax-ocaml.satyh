@@ -10,22 +10,22 @@ module SyntaxOcaml : sig
   type matcher
 
   % val patterns : matcher list -> matcher
-  val pattern : context -> string -> matcher
+  val pattern : string -> matcher
   val capture : int -> (item -> item) -> matcher -> matcher
   val token : token -> item -> item
   % val include : matcher -> item -> item
-  val rule : context -> matcher
+  val rule : matcher
   val scan : context -> string -> inline-boxes
 
 end = struct
 
-  type item = string * context
+  type item = int * int * color option
   type matcher = (item list) exec-ctx parser
 
-  let pattern ctx pat =
+  let pattern pat =
     let p = Regex.compile pat in
     p >>= (fun matched -> (
-      let elem-list = List.map (fun s -> (s, ctx)) matched in
+      let elem-list = List.map (fun (bpos, epos, _) -> (bpos, epos, None)) matched in
       return elem-list
     ))
 
@@ -45,34 +45,92 @@ end = struct
     ))
 
   let token tok item =
-    let (s, ctx) = item in
-    let ctx = ctx |> ColorScheme.set-color-of tok in
-    (s, ctx)
+    let (bpos, epos, _) = item in
+    (bpos, epos, Some (ColorScheme.color-of tok))
 
 
-  let rule-let ctx =
-    pattern ctx `let|and`
+  let rule-let =
+    pattern `let|and`
       |> capture 0 (token Keyword)
 
-  let rule-integer ctx =
-    pattern ctx `1+`
+  let rule-integer =
+    pattern `1+`
       |> capture 0 (token NumericConstant)
 
-  let rule ctx =
+  let rule-test =
+    pattern `ab(cd(ef)gh)(ij)`
+      |> capture 0 (token String)
+      |> capture 1 (token EscapeChar)
+      |> capture 2 (token Keyword)
+      |> capture 3 (token Comment)
+
+  let rule =
     choice [
-      rule-let ctx
-    ; rule-integer ctx
+      rule-let
+    ; rule-integer
+    ; rule-test
     ]
 
+  let take-item-list-subset rpos item-list =
+    let-rec iter acc lst =
+      match lst with
+      | [] -> (List.reverse acc, [])
+      | item :: rest ->
+          let (_, epos, _) = item in
+          if epos <= rpos then iter (item :: acc) rest
+          else (List.reverse acc, lst)
+    in
+    iter [] item-list
+
+  let set-text-color-opt color-opt ctx =
+    match color-opt with
+    | None -> ctx
+    | Some color -> ctx |> set-text-color color
+
+  let build-colored-ib ctx src item-list =
+    let-rec iter ctx acc lpos rpos item-list =
+      match item-list with
+      | [] ->
+          let ib-rest =
+            if lpos == rpos then inline-nil
+            else read-inline ctx (embed-string (string-sub src lpos (rpos - lpos)))
+          in
+          acc ++ ib-rest
+      | (bpos, epos, color-opt) :: rest ->
+          let ib-left =
+            if lpos == bpos then inline-nil
+            else read-inline ctx (embed-string (string-sub src lpos (bpos - lpos)))
+          in
+          let (subset, rest1) = take-item-list-subset epos rest in
+          let ctx1 = ctx |> set-text-color-opt color-opt in
+          let ib-mid = iter ctx1 inline-nil bpos epos subset in
+          iter ctx (acc ++ ib-left ++ ib-mid) epos rpos rest1
+    in
+    match item-list with
+    | [] -> inline-nil
+    | (bpos, epos, color-opt) :: rest ->
+        let ctx = ctx |> set-text-color-opt color-opt in
+        iter ctx inline-nil bpos epos rest
+
+  let print-item-list item-list =
+    let-rec iter acc lst =
+      match lst with
+      | [] -> acc
+      | (bpos, epos, ctx) :: rest ->
+          let s = `[` ^ arabic bpos ^ `,` ^ arabic epos ^ `]` in
+          let ib = read-inline ctx (embed-string s) in
+          iter (acc ++ ib) rest
+    in
+    iter inline-nil item-list
+
   let scan ctx code =
-    match parse exec-ctx-init (rule ctx) code with
+    match parse exec-ctx-init rule code with
     | None ->
         read-inline ctx (embed-string code)
     | Some (item-list, st) ->
-        let ib = List.fold-left (fun ibacc (s, ctx) ->
-          ibacc ++ read-inline ctx (embed-string s)
-        ) inline-nil item-list
-        in
+        % let ib = inline-nil in
+        let ib = build-colored-ib ctx st#src item-list in
+        % let ib = print-item-list item-list in
         let ib-rest =
           let len = string-length st#src in
           let rest = string-sub st#src st#offset (len - st#offset) in

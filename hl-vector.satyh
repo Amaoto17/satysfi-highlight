@@ -7,6 +7,7 @@ module Vec : sig
   val get : 'a vec -> int -> 'a option
   val push : 'a vec -> 'a -> 'a vec
   val set : 'a vec -> int -> 'a -> 'a vec
+  val map : ('a -> 'b) -> 'a vec -> 'b vec
 
 end = struct
 
@@ -75,5 +76,13 @@ end = struct
     in
     let heap = iter t#heap (build-path n) in
     (| t with heap = heap |)
+
+  let map f t =
+    let-rec iter heap =
+      match heap with
+      | Empty -> Empty
+      | Node (e, left, right) -> Node (f e, iter left, iter right)
+    in
+    (| heap = iter t#heap; size = t#size |)
 
 end

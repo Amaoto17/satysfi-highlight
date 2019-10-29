@@ -1,3 +1,6 @@
 type token =
   | Keyword
   | NumericConstant
+  | EscapeChar
+  | String
+  | Comment

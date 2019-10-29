@@ -18,6 +18,7 @@ type node =
   | Opt of quantity * node
   | Many of quantity * node
   | Many1 of quantity * node
+  | Group of node
 
 
 type inst =
@@ -28,13 +29,15 @@ type inst =
   | OpJump of int
   | OpAtomicExec of int * int
   | OpStop
+  | OpSaveStart
+  | OpSaveEnd of int
 
 
 type exec-ctx = (|
   inst-seq : inst Vec.vec;
   pc : int;
   pos-stack : int list;
-  matched : string list;
+  matched : ((int * int * string) option) list;
 |)
 
 let exec-ctx-init = (|
@@ -51,14 +54,26 @@ module Syntax : sig
 
 end = struct
 
-  let re-meta-char = `|?*+`
+  let re-meta-char = `|?*+()`
 
   let item = none-of re-meta-char
 
-  let-rec primary = fun st -> st |> run (
-    item >>= (fun c ->
-      return (Char c)
-    )
+  let-rec paren = fun st -> st |> run (
+    char `(` >>
+    choice [
+      alt >>= (fun t -> (
+        return (Group t)
+      ))
+    ] << char `)`
+  )
+
+  and primary = fun st -> st |> run (
+    choice [
+      paren
+    ; item >>= (fun c ->
+        return (Char c)
+      )
+    ]
   )
 
   and quantifier builder =
@@ -101,7 +116,7 @@ end
 
 module Exec : sig
 
-  val run : inst Vec.vec -> (string list) exec-ctx parser
+  val run : inst Vec.vec -> ((int * int * string) list) exec-ctx parser
 
 end = struct
 
@@ -127,18 +142,35 @@ end = struct
 
   let get-all-match =
     get-state >>= (fun ctx -> (
-      return ctx#matched
+      let matched = List.map (Option.from (0, 0, ` `)) ctx#matched in
+      return (List.reverse matched)
+      % return ctx#matched
     ))
 
-  let add-match s =
+  let list-nth-set n elem lst =
+    let-rec iter k lst =
+      match lst with
+      | [] -> []
+      | x :: xs ->
+          if k == n then elem :: xs
+          else x :: iter (k + 1) xs
+    in
+    iter 0 lst
+
+  let set-match n bpos epos s =
     get-state >>= (fun ctx -> (
-      put-state (| ctx with matched = s :: ctx#matched |)
+      let len = List.length ctx#matched in
+      let matched = list-nth-set (len - 1 - n) (Some (bpos, epos, s)) ctx#matched in
+      put-state (| ctx with matched = matched |)
+      % put-state (| ctx with matched = (bpos, epos, s) :: ctx#matched |)
     ))
 
   let push-current-pos =
     current-pos >>= (fun pos -> (
       get-state >>= (fun ctx -> (
-        put-state (| ctx with pos-stack = pos :: ctx#pos-stack |)
+        let pos-stack = pos :: ctx#pos-stack in
+        let matched = None :: ctx#matched in
+        put-state (| ctx with pos-stack = pos-stack; matched = matched |)
       ))
     ))
 
@@ -151,12 +183,13 @@ end = struct
           return pos
     ))
 
-  let capture =
+  let capture n =
     get >>= (fun st -> (
       pop-pos >>= (fun pos -> (
         let curpos = st#offset in
         let sub = string-sub st#src pos (curpos - pos) in
-        add-match sub
+        set-match n pos curpos sub
+        % add-match pos curpos sub
       ))
     ))
 
@@ -198,7 +231,7 @@ end = struct
           match1 c >>
           next
       | OpMatch ->
-          capture >>
+          capture 0 >>
           get-all-match
       | OpSplit (pc1, pc2) ->
           split pc1 pc2
@@ -209,6 +242,12 @@ end = struct
           jump pc2
       | OpStop ->
           return []
+      | OpSaveStart ->
+          push-current-pos >>
+          next
+      | OpSaveEnd n ->
+          capture n >>
+          next
     ))
   )
 
@@ -216,22 +255,16 @@ end = struct
     let ctx = (| exec-ctx-init with inst-seq = inst-seq |) in
     put-state ctx >>
     push-current-pos >>
-    exec |> map (fun matched -> (
-      match matched with
-      | [] -> []
-      | x :: xs -> x :: List.reverse xs
-    ))
+    exec
 
 end
 
 
 module Regex : sig
 
-  val compile : string -> (string list) exec-ctx parser
+  val compile : string -> ((int * int * string) list) exec-ctx parser
 
 end = struct
-
-  let dummy = ()
 
   let build ast =
     let-mutable inst-seq <- Vec.empty in
@@ -242,6 +275,7 @@ end = struct
       let () = emit OpEmpty in
       fun inst -> (inst-seq <- Vec.set !inst-seq i inst)
     in
+    let-mutable n-save <- 0 in
     let-rec iter node =
       match node with
       | Char c ->
@@ -283,6 +317,12 @@ end = struct
             (set-split, t-begin)
           in
           emit-quantify emitter quantity
+      | Group t ->
+          let () = n-save <- !n-save + 1 in
+          let n = !n-save in
+          let () = emit OpSaveStart in
+          let () = iter t in
+          emit (OpSaveEnd n)
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->

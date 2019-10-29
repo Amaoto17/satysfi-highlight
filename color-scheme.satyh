@@ -5,21 +5,23 @@
 module ColorScheme: sig
 
   val foreground : color
-  val set-color-of : token -> context -> context
+  val color-of : token -> color
 
 end = struct
 
   let red   = Color.rgb 0.62 0.00 0.17
   let green = Color.rgb 0.32 0.52 0.09
+  let blue =  Color.rgb 0.13 0.36 0.52
+  let gray =  Color.rgb 0.48 0.48 0.48
 
   let foreground = Color.gray 0.18
 
-  let set-color-of token ctx =
-    let color =
-      match token with
-      | Keyword -> red
-      | NumericConstant -> green
-    in
-    ctx |> set-text-color color
+  let color-of token =
+    match token with
+    | Keyword -> red
+    | NumericConstant -> green
+    | EscapeChar -> blue
+    | String -> green
+    | Comment -> gray
 
 end
