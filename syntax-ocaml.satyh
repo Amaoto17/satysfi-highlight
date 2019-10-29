@@ -57,18 +57,23 @@ end = struct
     pattern `1+`
       |> capture 0 (token NumericConstant)
 
-  let rule-test =
+  let rule-test1 =
     pattern `ab(cd(ef)gh)(ij)`
       |> capture 0 (token String)
       |> capture 1 (token EscapeChar)
       |> capture 2 (token Keyword)
       |> capture 3 (token Comment)
 
+  let rule-test2 =
+    pattern `[a-d&&[^b]]*`
+      |> capture 0 (token String)
+
   let rule =
     choice [
       rule-let
     ; rule-integer
-    ; rule-test
+    ; rule-test1
+    ; rule-test2
     ]
 
   let take-item-list-subset rpos item-list =

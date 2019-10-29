@@ -1,6 +1,7 @@
 @require: option
 @import: hl-vector
 @import: hl-parser
+@import: hl-utils
 
 open Parser
 
@@ -19,6 +20,7 @@ type node =
   | Many of quantity * node
   | Many1 of quantity * node
   | Group of node
+  | Satisfy of string -> bool
 
 
 type inst =
@@ -31,6 +33,7 @@ type inst =
   | OpStop
   | OpSaveStart
   | OpSaveEnd of int
+  | OpSatisfy of string -> bool
 
 
 type exec-ctx = (|
@@ -48,15 +51,177 @@ let exec-ctx-init = (|
 |)
 
 
+let control-char =
+  choice [
+    char `n` >> return (string-unexplode [12])
+  ; char `t` >> return (string-unexplode [11])
+  ; char `r` >> return (string-unexplode [15])
+  ]
+
+let shorthand =
+  choice [
+    char `w` >> return is-word-char
+  ]
+
+
+module CharClass : sig
+
+  val parse : (string -> bool) unit parser
+
+end = struct
+
+  let string-index s init-pos c =
+    let-rec iter k =
+      if k == string-length s then -1
+      else
+        let c1 = string-sub s k 1 in
+        if string-same c1 c then k else iter (k + 1)
+    in
+    iter init-pos
+
+
+  let lower = `abcdefghijklmnopqrstuvwxyz`
+  let upper = `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
+  let number = `0123456789`
+
+  let option-is-some opt =
+    match opt with
+    | Some _ -> true
+    | None   -> false
+
+  let string-between c1 c2 =
+    let aux group =
+      let pos1 = string-index group 0 c1 in
+      if pos1 == -1 then None
+      else
+        let pos2 = string-index group pos1 c2 in
+        if pos2 == -1 then None
+        else Some (string-sub group pos1 (pos2 - pos1 + 1))
+    in
+    let str-opt = aux lower in
+    if option-is-some str-opt then str-opt
+    else let str-opt = aux upper in
+    if option-is-some str-opt then str-opt
+    else aux number
+
+
+  type class-node =
+    | Class of class-node
+    | Single of string
+    | Range of string * string
+    | Shorthand of string -> bool
+    | Union of class-node * class-node
+    | Prod of class-node * class-node
+    | Not of class-node
+
+  
+  let build ast =
+    let-rec iter node =
+      match node with
+      | Single c -> string-same c
+      | Range (c1, c2) -> (
+          match string-between c1 c2 with
+          | None -> fun _ -> false
+          | Some str -> string-contains str
+        )
+      | Class t -> iter t
+      | Shorthand pred -> pred
+      | Not t -> fun x -> not (iter t x)
+      | Prod (t1, t2) -> fun x -> iter t1 x && iter t2 x
+      | Union (t1, t2) -> fun x -> iter t1 x || iter t2 x
+    in
+    return (iter ast)
+
+
+  let class-meta-char = `[]&-\`
+
+  let item = none-of class-meta-char
+
+  let-rec escaped = fun st -> st |> run (
+    char `\` >>
+    choice [
+      control-char >>= (fun c -> (
+        return (Single c)
+      ))
+    ; shorthand >>= (fun pred -> (
+        return (Shorthand pred)
+      ))
+    ; any >>= (fun c -> (
+        return (Single c)
+      ))
+    ]
+  )
+
+  and range c1 =
+    char `-` >>
+    item >>= (fun c2 -> (
+      return (Range (c1, c2))
+    ))
+
+  and primary = fun st -> st |> run (
+    choice [
+      char `[` >>
+      class >>= (fun t -> (
+        return (Class t)
+      ))
+    ; escaped
+    ; item >>= (fun c -> (
+        (range c) <|> return (Single c)
+      ))
+    ]
+  )
+
+  and enum = fun st -> st |> run (
+    let enum-op =
+      return (fun t1 t2 -> Union (t1, t2))
+    in
+    chainl primary enum-op
+  )
+
+  and prod = fun st -> st |> run (
+    let prod-op =
+      string `&&` >>
+      return (fun t1 t2 -> Prod (t1, t2))
+    in
+    chainl enum prod-op
+  )
+
+  and compl = fun st -> st |> run (
+    opt-with (fun t -> t) (
+      char `^` >> return (fun t -> Not t)
+    ) >>= (fun f -> (
+      prod >>= (fun t -> (
+        return (f t)
+      ))
+    ))
+  )
+
+  and class = fun st -> st |> run (
+    compl << char `]`
+  )
+
+  and parse = fun st -> st |> run (
+    char `[` >>
+    class >>= build
+  )
+
+end
+
+
 module Syntax : sig
 
-  val re : node 'u parser
+  val re : node unit parser
 
 end = struct
 
   let re-meta-char = `|?*+()`
 
   let item = none-of re-meta-char
+
+  let char-class =
+    CharClass.parse >>= (fun pred -> (
+      return (Satisfy pred)
+    ))
 
   let-rec paren = fun st -> st |> run (
     char `(` >>
@@ -70,6 +235,7 @@ end = struct
   and primary = fun st -> st |> run (
     choice [
       paren
+    ; char-class
     ; item >>= (fun c ->
         return (Char c)
       )
@@ -139,6 +305,9 @@ end = struct
 
   let match1 c =
     char c >> return ()
+
+  let match1p pred =
+    satisfy pred >> return ()
 
   let get-all-match =
     get-state >>= (fun ctx -> (
@@ -248,6 +417,10 @@ end = struct
       | OpSaveEnd n ->
           capture n >>
           next
+      | OpSatisfy pred ->
+          ensure 1 >>
+          match1p pred >>
+          next
     ))
   )
 
@@ -323,6 +496,8 @@ end = struct
           let () = emit OpSaveStart in
           let () = iter t in
           emit (OpSaveEnd n)
+      | Satisfy pred ->
+          emit (OpSatisfy pred)
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->

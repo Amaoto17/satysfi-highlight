@@ -1,4 +1,5 @@
 @require: option
+@import: hl-utils
 
 
 type 'u state = (|
@@ -29,10 +30,12 @@ module Parser : sig
   val look-ahead : 'a 'u parser -> 'a 'u parser
   val not-followed-by : 'a 'u parser -> unit 'u parser
   val choice : ('a 'u parser) list -> 'a 'u parser
+  val opt-with : 'a -> 'a 'u parser -> 'a 'u parser
   val many : 'a 'u parser -> ('a list) 'u parser
   val many1 : 'a 'u parser -> ('a list) 'u parser
   val chainl : 'a 'u parser -> ('a -> 'a -> 'a) 'u parser -> 'a 'u parser
   val satisfy : (string -> bool) -> string 'u parser
+  val string : string -> string 'u parser
   val any : string 'u parser
   val eof : unit 'u parser
   val char : string -> string 'u parser
@@ -99,6 +102,8 @@ end = struct
 
   let choice ps = List.fold-left (<|>) fail ps
 
+  let opt-with default p = p <|> return default
+
   let-rec many p = fun st -> st |> (
     many1 p <|> return []
   )
@@ -141,6 +146,16 @@ end = struct
           else fail
     ))
 
+  let string s =
+    let len = string-length s in
+    get >>= (fun st -> (
+      match uncons st len with
+      | None -> fail
+      | Some (elem, st1) ->
+          if string-same elem s then put st1 >> return elem
+          else fail
+    ))
+
   let any = fun st -> st |> (
     satisfy (fun _ -> true)
   )
@@ -150,17 +165,6 @@ end = struct
   )
 
   let char c = satisfy (string-same c)
-
-  let string-contains s c =
-    let len = string-length s in
-    let-rec iter k =
-      if k >= len then false
-      else
-        let c1 = string-sub s k 1 in
-        if string-same c c1 then true
-        else iter (k + 1)
-    in
-    iter 0
 
   let none-of s = satisfy (fun c -> not (string-contains s c))
 

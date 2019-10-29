@@ -1,0 +1,20 @@
+let string-contains s c =
+  let len = string-length s in
+  let-rec iter k =
+    if k >= len then false
+    else
+      let c1 = string-sub s k 1 in
+      if string-same c c1 then true
+      else iter (k + 1)
+  in
+  iter 0
+
+let is-digit = string-contains `0123456789`
+let is-oct-digit = string-contains `01234567`
+let is-hex-digit = string-contains `0123456789abcdefABCDEF`
+let is-upper = string-contains `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
+let is-lower = string-contains `abcdefghijklmnopqrstuvwxyz`
+let is-letter c = is-upper c || is-lower c
+let is-alpha-num c = is-letter c || is-digit c
+let is-word-char c = is-alpha-num c || string-same c `_`
+let is-space c = string-contains #` `#
