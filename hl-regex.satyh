@@ -233,7 +233,11 @@ end = struct
   let-rec paren = fun st -> st |> run (
     char `(` >>
     choice [
-      alt >>= (fun t -> (
+      char `?` >>
+        choice [
+          char `:` >> alt
+        ]
+    ; alt >>= (fun t -> (
         return (Group t)
       ))
     ] << char `)`

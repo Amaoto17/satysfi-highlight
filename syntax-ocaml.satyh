@@ -50,9 +50,9 @@ end = struct
 
 
   let rule-let =
-    pattern `(let(\s+rec)?|and)\s+(\w+)`
+    pattern `(let(?:\s+rec)?|and)\s+(\w+)`
       |> capture 1 (token Keyword)
-      |> capture 3 (token FunctionName)
+      |> capture 2 (token FunctionName)
 
   let rule-integer =
     pattern `\d+`
