@@ -20,6 +20,9 @@ and is_even n =
   if n = 0 then true else is_odd (n - 1)
 
 let f x = let y = 1 in x + y
+
+"hello, world"
+"hello, world\n"
 ```
     );
   >

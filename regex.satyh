@@ -59,11 +59,13 @@ type inst =
   | OpBackRef of int
 
 
+type match-data = (int * int * string) option % begin, end, matched string
+
 type exec-ctx = (|
   inst-seq : inst Vec.vec;
   pc : int;
   pos-stack : int list;
-  matched : ((int * int * string) option) list;
+  matched : match-data list;
 |)
 
 let exec-ctx-init = (|
@@ -373,7 +375,7 @@ end
 
 module Exec : sig
 
-  val run : inst Vec.vec -> int -> ((int * int * string) list) exec-ctx parser
+  val run : inst Vec.vec -> int -> (match-data list) exec-ctx parser
 
 end = struct
 
@@ -406,14 +408,16 @@ end = struct
   let get-nth-match n =
     get-state >>= (fun ctx -> (
       let len = List.length ctx#matched in
-      let submatch = Option.from None (List.nth (len - 1 - n) ctx#matched) in
+      % let submatch = Option.from None (List.nth (len - 1 - n) ctx#matched) in
+      let submatch = Option.from None (List.nth n ctx#matched) in
       return submatch
     ))
 
   let get-all-match =
     get-state >>= (fun ctx -> (
-      let matched = List.map (Option.from (0, 0, ` `)) ctx#matched in
-      return (List.reverse matched)
+      % let matched = List.map (Option.from (0, 0, ` `)) ctx#matched in
+      % return (List.reverse matched)
+      return ctx#matched
     ))
 
   let list-nth-set n elem lst =
@@ -428,8 +432,9 @@ end = struct
 
   let set-match n bpos epos s =
     get-state >>= (fun ctx -> (
-      let len = List.length ctx#matched in
-      let matched = list-nth-set (len - 1 - n) (Some (bpos, epos, s)) ctx#matched in
+      % let len = List.length ctx#matched in
+      % let matched = list-nth-set (len - 1 - n) (Some (bpos, epos, s)) ctx#matched in
+      let matched = list-nth-set n (Some (bpos, epos, s)) ctx#matched in
       put-state (| ctx with matched = matched |)
     ))
 
@@ -569,7 +574,7 @@ end
 
 module Regex : sig
 
-  val compile : string -> ((int * int * string) list) exec-ctx parser
+  val compile : string -> (match-data list) exec-ctx parser
 
 end = struct
 

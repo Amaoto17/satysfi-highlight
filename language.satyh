@@ -16,14 +16,21 @@ module Language : sig
 
 end = struct
 
-  type item = int * int * string * color option
+  type item =
+    | Matched of int * int * string * color option
+    | NotMatched
+
   type rule = (item list) exec-ctx parser
 
   let pattern pat =
     let p = Regex.compile pat in
     p >>= (fun matched -> (
-      let elem-list = List.map (fun (bpos, epos, s) -> (bpos, epos, s, None)) matched in
-      return elem-list
+      let item-list = matched |> List.map (fun data -> (
+        match data with
+        | None -> NotMatched
+        | Some (bpos, epos, s) -> Matched (bpos, epos, s, None)
+      )) in
+      return item-list
     ))
 
   let patterns = choice
@@ -44,17 +51,22 @@ end = struct
     ))
 
   let token tok item =
-    let (bpos, epos, s, _) = item in
-    (bpos, epos, s, Some (ColorScheme.color-of tok))
+    match item with
+    | NotMatched -> NotMatched
+    | Matched (bpos, epos, s, _) ->
+        Matched (bpos, epos, s, Some (ColorScheme.color-of tok))
 
   let take-item-list-subset rpos item-list =
     let-rec iter acc lst =
       match lst with
       | [] -> (List.reverse acc, [])
-      | item :: rest ->
-          let (_, epos, _, _) = item in
-          if epos <= rpos then iter (item :: acc) rest
-          else (List.reverse acc, lst)
+      | item :: rest -> (
+          match item with
+          | NotMatched -> iter acc rest
+          | Matched (_, epos, _, _) ->
+              if epos <= rpos then iter (item :: acc) rest
+              else (List.reverse acc, lst)
+        )
     in
     iter [] item-list
 
@@ -75,7 +87,8 @@ end = struct
       | [] ->
           let ib-rest = read-inline-substr ctx src lpos rpos in
           acc ++ ib-rest
-      | (bpos, epos, _, color-opt) :: rest ->
+      | (NotMatched) :: rest -> iter ctx acc lpos rpos rest
+      | (Matched (bpos, epos, _, color-opt)) :: rest ->
           let ib-left = read-inline-substr ctx src lpos bpos in
           let (subset, rest1) = take-item-list-subset epos rest in
           let ctx1 = ctx |> set-text-color-opt color-opt in
@@ -89,7 +102,8 @@ end = struct
     let-rec iter acc lst =
       match lst with
       | [] -> acc
-      | (bpos, epos, s, _) :: rest ->
+      | (NotMatched) :: rest -> iter acc rest
+      | (Matched (bpos, epos, s, _)) :: rest ->
           let msg = `[` ^ s ^ `:` ^ arabic bpos ^ `-` ^ arabic epos ^ `]` in
           let ib = read-inline ctx (embed-string msg) in
           iter (acc ++ ib) rest
