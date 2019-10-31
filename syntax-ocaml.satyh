@@ -15,6 +15,9 @@ end = struct
       |> capture 1 (token Keyword)
       |> capture 2 (token FunctionName)
 
+  let rule-default =
+    pattern `\s+|\w+\s|.`
+
   % let rule-integer =
   %   pattern `\d+`
   %     |> capture 0 (token NumericConstant)
@@ -68,8 +71,9 @@ end = struct
       |> capture 0 (token Keyword)
 
   let rule =
-    choice [
+    patterns [
       rule-let
+    ; rule-default
     ]
 
 end

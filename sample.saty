@@ -17,48 +17,7 @@ let rec dummy = ()
 
 and foo = ()
 
-0123456789
-
-abcdefghij
-
-acdaccdcb
-
-!abc
-
-123
-0123
-
-in
-int
-
-!!abcdefg
-!!abcdef
-
-A?
-ABC::def
-
-?abc
-.abc
-
-34
-1212
-
-ORZ
-XOR
-
-AAAA
-AAAAA
-AAAAAA
-B
-BB
-BBB
-CCC
-CCCC
-CCCCC
-D
-DD
-DDD
-DDDD
+let f x = let y = 1 in x + y
 ```
     );
   >

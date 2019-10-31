@@ -3,17 +3,21 @@
 @import: hl-regex
 
 
-type item = int * int * color option
-type rule = (item list) exec-ctx parser
-
 module Syntax : sig
 
+  type item
+  type rule
+
   val pattern : string -> rule
+  val patterns : rule list -> rule
   val capture : int -> (item -> item) -> rule -> rule
   val token : token -> item -> item
   val scan : context -> rule -> string -> inline-boxes
 
 end = struct
+
+  type item = int * int * color option
+  type rule = (item list) exec-ctx parser
 
   let pattern pat =
     let p = Regex.compile pat in
@@ -21,6 +25,8 @@ end = struct
       let elem-list = List.map (fun (bpos, epos, _) -> (bpos, epos, None)) matched in
       return elem-list
     ))
+
+  let patterns = choice
 
   let list-nth-map n f lst =
     let-rec iter k lst =
@@ -57,30 +63,26 @@ end = struct
     | None -> ctx
     | Some color -> ctx |> set-text-color color
 
+  let read-inline-substr ctx src lpos rpos =
+    if lpos == rpos then inline-nil
+    else
+      let substr = string-sub src lpos (rpos - lpos) in
+      read-inline ctx (embed-string substr)
+
   let build-colored-ib ctx src item-list =
     let-rec iter ctx acc lpos rpos item-list =
       match item-list with
       | [] ->
-          let ib-rest =
-            if lpos == rpos then inline-nil
-            else read-inline ctx (embed-string (string-sub src lpos (rpos - lpos)))
-          in
+          let ib-rest = read-inline-substr ctx src lpos rpos in
           acc ++ ib-rest
       | (bpos, epos, color-opt) :: rest ->
-          let ib-left =
-            if lpos == bpos then inline-nil
-            else read-inline ctx (embed-string (string-sub src lpos (bpos - lpos)))
-          in
+          let ib-left = read-inline-substr ctx src lpos bpos in
           let (subset, rest1) = take-item-list-subset epos rest in
           let ctx1 = ctx |> set-text-color-opt color-opt in
           let ib-mid = iter ctx1 inline-nil bpos epos subset in
           iter ctx (acc ++ ib-left ++ ib-mid) epos rpos rest1
     in
-    match item-list with
-    | [] -> inline-nil
-    | (bpos, epos, color-opt) :: rest ->
-        let ctx = ctx |> set-text-color-opt color-opt in
-        iter ctx inline-nil bpos epos rest
+    iter ctx inline-nil 0 (string-length src) item-list
 
   % for debugging
   let print-item-list ctx item-list =
@@ -95,7 +97,8 @@ end = struct
     iter inline-nil item-list
 
   let scan ctx rule code =
-    match parse exec-ctx-init rule code with
+    let p = many rule |> map List.concat in
+    match parse exec-ctx-init p code with
     | None ->
         read-inline ctx (embed-string code)
     | Some (item-list, st) ->
