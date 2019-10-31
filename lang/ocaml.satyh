@@ -1,0 +1,79 @@
+@import: ../token
+@import: ../language
+
+open Language
+
+
+module OCaml : sig
+
+  val rule : rule
+
+end = struct
+
+  let rule-let =
+    pattern `(let(?:\s+rec)?|and)\s+(\w+)`
+      |> capture 1 (token Keyword)
+      |> capture 2 (token FunctionName)
+
+  let rule-default =
+    pattern `\s+|\w+\s|.`
+
+  let rule =
+    patterns [
+      rule-let
+    ; rule-default
+    ]
+
+  % let rule-integer =
+  %   pattern `\d+`
+  %     |> capture 0 (token NumericConstant)
+
+  % let rule-test1 =
+  %   pattern `ab(cd(ef)gh)(ij)`
+  %     |> capture 0 (token String)
+  %     |> capture 1 (token EscapeChar)
+  %     |> capture 2 (token Keyword)
+  %     |> capture 3 (token Comment)
+
+  % let rule-test2 =
+  %   pattern `[a-d&&[^b]]+`
+  %     |> capture 0 (token String)
+
+  % let rule-test3 =
+  %   pattern `(!abc)|(!def)`
+  %     |> capture 1 (token EscapeChar)
+  %     |> capture 2 (token Keyword)
+
+  % let rule-test4 =
+  %   pattern `(?=0)\d+`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test5 =
+  %   pattern `\bin\b`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test6 =
+  %   pattern `^!!abcdef$`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test7 =
+  %   pattern `A\B.*`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test8 =
+  %   pattern `\.abc`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test9 =
+  %   pattern `((12)|(34))\2`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test10 =
+  %   pattern `(?!X)[A-Z]+`
+  %     |> capture 0 (token Keyword)
+
+  % let rule-test11 =
+  %   pattern `A{5}$|B{2,}$|C{,4}$|D{2,3}$`
+  %     |> capture 0 (token Keyword)
+
+end

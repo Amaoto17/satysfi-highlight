@@ -1,5 +1,5 @@
 @require: option
-@import: hl-utils
+@import: utils
 
 
 type 'u state = (|

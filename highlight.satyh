@@ -1,8 +1,7 @@
 @require: vdecoset
 @require: deco
 @import: color-scheme
-@import: syntax-ocaml
-@import: hl-parser
+@import: lang/ocaml
 
 
 module Highlight : sig
@@ -12,7 +11,7 @@ module Highlight : sig
 end = struct
 
   let syntax-highlight ctx code =
-    Syntax.scan ctx SyntaxOcaml.rule code
+    Language.scan ctx OCaml.rule code
 
 
   let decoset-code = VDecoSet.empty

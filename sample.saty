@@ -11,11 +11,13 @@ document (|
   +section{OCamlでの例} <
     +code(
 ```
-let bar = 1
+let foo = 1
 
-let rec dummy = ()
+let rec is_odd n =
+  if n = 0 then false else is_even (n - 1)
 
-and foo = ()
+and is_even n =
+  if n = 0 then true else is_odd (n - 1)
 
 let f x = let y = 1 in x + y
 ```

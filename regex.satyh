@@ -1,7 +1,7 @@
 @require: option
-@import: hl-vector
-@import: hl-parser
-@import: hl-utils
+@import: vector
+@import: parser
+@import: utils
 
 open Parser
 

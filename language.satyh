@@ -1,9 +1,9 @@
-@import: hl-token
-@import: hl-parser
-@import: hl-regex
+@import: token
+@import: parser
+@import: regex
 
 
-module Syntax : sig
+module Language : sig
 
   type item
   type rule
@@ -16,13 +16,13 @@ module Syntax : sig
 
 end = struct
 
-  type item = int * int * color option
+  type item = int * int * string * color option
   type rule = (item list) exec-ctx parser
 
   let pattern pat =
     let p = Regex.compile pat in
     p >>= (fun matched -> (
-      let elem-list = List.map (fun (bpos, epos, _) -> (bpos, epos, None)) matched in
+      let elem-list = List.map (fun (bpos, epos, s) -> (bpos, epos, s, None)) matched in
       return elem-list
     ))
 
@@ -44,15 +44,15 @@ end = struct
     ))
 
   let token tok item =
-    let (bpos, epos, _) = item in
-    (bpos, epos, Some (ColorScheme.color-of tok))
+    let (bpos, epos, s, _) = item in
+    (bpos, epos, s, Some (ColorScheme.color-of tok))
 
   let take-item-list-subset rpos item-list =
     let-rec iter acc lst =
       match lst with
       | [] -> (List.reverse acc, [])
       | item :: rest ->
-          let (_, epos, _) = item in
+          let (_, epos, _, _) = item in
           if epos <= rpos then iter (item :: acc) rest
           else (List.reverse acc, lst)
     in
@@ -75,7 +75,7 @@ end = struct
       | [] ->
           let ib-rest = read-inline-substr ctx src lpos rpos in
           acc ++ ib-rest
-      | (bpos, epos, color-opt) :: rest ->
+      | (bpos, epos, _, color-opt) :: rest ->
           let ib-left = read-inline-substr ctx src lpos bpos in
           let (subset, rest1) = take-item-list-subset epos rest in
           let ctx1 = ctx |> set-text-color-opt color-opt in
@@ -89,9 +89,9 @@ end = struct
     let-rec iter acc lst =
       match lst with
       | [] -> acc
-      | (bpos, epos, _) :: rest ->
-          let s = `[` ^ arabic bpos ^ `,` ^ arabic epos ^ `]` in
-          let ib = read-inline ctx (embed-string s) in
+      | (bpos, epos, s, _) :: rest ->
+          let msg = `[` ^ s ^ `:` ^ arabic bpos ^ `-` ^ arabic epos ^ `]` in
+          let ib = read-inline ctx (embed-string msg) in
           iter (acc ++ ib) rest
     in
     iter inline-nil item-list
