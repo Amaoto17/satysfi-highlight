@@ -11,7 +11,7 @@ module OCaml : sig
 end = struct
 
   let rule-let =
-    pattern `(let(?:\s+rec)?|and)\s+(\w+)`
+    pattern `(let(?:\s+rec)?|and)\s+(?:\w+\s*=|(\w+))`
       |> capture 1 (token Keyword)
       |> capture 2 (token FunctionName)
 
@@ -24,12 +24,37 @@ end = struct
       |> capture 0 (token String)
       |> capture 1 (include rule-char-seq)
 
+  let rule-decimal =
+    pattern `-?\d[\d_]*`
+      |> capture 0 (token NumericConstant)
+
+  let rule-octal =
+    pattern `-?0[oO][0-7][0-7_]*`
+      |> capture 0 (token NumericConstant)
+
+  let rule-hexadecimal =
+    pattern `-?0[xX]\h[\h_]*`
+      |> capture 0 (token NumericConstant)
+
+  let rule-binary =
+    pattern `-?0[bB][01][01_]*`
+      |> capture 0 (token NumericConstant)
+
+  let rule-integer =
+    patterns [
+      rule-octal
+    ; rule-hexadecimal
+    ; rule-binary
+    ; rule-decimal
+    ]
+
   let rule-default =
-    pattern `\s+|\w+\s|.\s`
+    pattern `\s+|\w+\s*|.\s*`
 
   let rule =
     patterns [
       rule-let
+    ; rule-integer
     ; rule-string
     ; rule-default
     ]

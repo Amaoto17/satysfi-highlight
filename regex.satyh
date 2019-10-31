@@ -102,31 +102,6 @@ module CharClass : sig
 
 end = struct
 
-  let lower = `abcdefghijklmnopqrstuvwxyz`
-  let upper = `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
-  let number = `0123456789`
-
-  let option-is-some opt =
-    match opt with
-    | Some _ -> true
-    | None   -> false
-
-  let string-between c1 c2 =
-    let aux group =
-      let pos1 = string-index group 0 c1 in
-      if pos1 == -1 then None
-      else
-        let pos2 = string-index group pos1 c2 in
-        if pos2 == -1 then None
-        else Some (string-sub group pos1 (pos2 - pos1 + 1))
-    in
-    let str-opt = aux lower in
-    if option-is-some str-opt then str-opt
-    else let str-opt = aux upper in
-    if option-is-some str-opt then str-opt
-    else aux number
-
-
   type class-node =
     | Class of class-node
     | Single of string
@@ -141,11 +116,9 @@ end = struct
     let-rec iter node =
       match node with
       | Single c -> string-same c
-      | Range (c1, c2) -> (
-          match string-between c1 c2 with
-          | None -> fun _ -> false
-          | Some str -> string-contains str
-        )
+      | Range (c1, c2) ->
+          let pat = regexp-of-string (`[` ^ c1 ^ `-` ^ c2 ^ `]`) in
+          string-match pat
       | Class t -> iter t
       | Shorthand pred -> pred
       | Not t -> negate (iter t)

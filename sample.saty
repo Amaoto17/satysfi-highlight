@@ -21,6 +21,14 @@ and is_even n =
 
 let f x = let y = 1 in x + y
 
+let decimal = -123_456_789
+
+let octal = 0o123
+
+let hexadecimal = 0xA0f1
+
+let binary = 0b0011
+
 "hello, world"
 "hello, world\n"
 ```
