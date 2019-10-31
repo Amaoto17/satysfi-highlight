@@ -12,24 +12,24 @@ module Language : sig
   val patterns : rule list -> rule
   val capture : int -> (item -> item) -> rule -> rule
   val token : token -> item -> item
+  val include : rule -> item -> item
   val scan : context -> rule -> string -> inline-boxes
 
 end = struct
 
-  type item =
-    | Matched of int * int * string * color option
-    | NotMatched
+  type color-ctx =
+    | Empty
+    | Simple of color
+    | Nested of item list
+
+  and item = match-data * color-ctx
 
   type rule = (item list) exec-ctx parser
 
   let pattern pat =
     let p = Regex.compile pat in
     p >>= (fun matched -> (
-      let item-list = matched |> List.map (fun data -> (
-        match data with
-        | None -> NotMatched
-        | Some (bpos, epos, s) -> Matched (bpos, epos, s, None)
-      )) in
+      let item-list = matched |> List.map (fun data -> (data, Empty)) in
       return item-list
     ))
 
@@ -51,22 +51,47 @@ end = struct
     ))
 
   let token tok item =
-    match item with
-    | NotMatched -> NotMatched
-    | Matched (bpos, epos, s, _) ->
-        Matched (bpos, epos, s, Some (ColorScheme.color-of tok))
+    let (data, color-ctx) = item in
+    (data, Simple (ColorScheme.color-of tok))
+
+  let include rule item =
+    let (data, color-ctx) = item in
+    match data with
+    | None -> item
+    | Some (bpos, epos, s) -> (
+        match parse exec-ctx-init rule s with
+        | None -> item
+        | Some (item-list, _) -> (data, Nested item-list)
+      )
+
+  let serialize-item-list item-list =
+    let-rec iter acc offset item-list =
+      match item-list with
+      | [] -> acc
+      | (None, _) :: rest -> iter acc offset rest
+      | (Some (bpos, epos, s), color-ctx) :: rest -> (
+          match color-ctx with
+          | Empty ->
+              let elem = (bpos + offset, epos + offset, s, None) in
+              iter (elem :: acc) offset rest
+          | Simple color ->
+              let elem = (bpos + offset, epos + offset, s, Some color) in
+              iter (elem :: acc) offset rest
+          | Nested item-list ->
+              let acc = iter acc (offset + bpos) item-list in
+              iter acc offset rest
+        )
+    in
+    iter [] 0 item-list |> List.reverse
 
   let take-item-list-subset rpos item-list =
     let-rec iter acc lst =
       match lst with
       | [] -> (List.reverse acc, [])
-      | item :: rest -> (
-          match item with
-          | NotMatched -> iter acc rest
-          | Matched (_, epos, _, _) ->
-              if epos <= rpos then iter (item :: acc) rest
-              else (List.reverse acc, lst)
-        )
+      | item :: rest ->
+          let (_, epos, _, _) = item in
+          if epos <= rpos then iter (item :: acc) rest
+          else (List.reverse acc, lst)
     in
     iter [] item-list
 
@@ -87,8 +112,7 @@ end = struct
       | [] ->
           let ib-rest = read-inline-substr ctx src lpos rpos in
           acc ++ ib-rest
-      | (NotMatched) :: rest -> iter ctx acc lpos rpos rest
-      | (Matched (bpos, epos, _, color-opt)) :: rest ->
+      | (bpos, epos, _, color-opt) :: rest ->
           let ib-left = read-inline-substr ctx src lpos bpos in
           let (subset, rest1) = take-item-list-subset epos rest in
           let ctx1 = ctx |> set-text-color-opt color-opt in
@@ -102,8 +126,7 @@ end = struct
     let-rec iter acc lst =
       match lst with
       | [] -> acc
-      | (NotMatched) :: rest -> iter acc rest
-      | (Matched (bpos, epos, s, _)) :: rest ->
+      | (bpos, epos, s, _) :: rest ->
           let msg = `[` ^ s ^ `:` ^ arabic bpos ^ `-` ^ arabic epos ^ `]` in
           let ib = read-inline ctx (embed-string msg) in
           iter (acc ++ ib) rest
@@ -116,8 +139,11 @@ end = struct
     | None ->
         read-inline ctx (embed-string code)
     | Some (item-list, st) ->
-        let ib = build-colored-ib ctx st#src item-list in
-        % let ib = print-item-list ctx item-list in
+        let ib =
+          serialize-item-list item-list
+            |> build-colored-ib ctx st#src
+            % |> print-item-list ctx
+        in
         let ib-rest =
           let len = string-length st#src in
           let rest = string-sub st#src st#offset (len - st#offset) in

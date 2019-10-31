@@ -15,10 +15,14 @@ end = struct
       |> capture 1 (token Keyword)
       |> capture 2 (token FunctionName)
 
-  let rule-string =
-    pattern `"(?:(\\[nrt])|[^"])*"`
-      |> capture 0 (token String)
+  let rule-char-seq =
+    pattern `(?:(\\[nrt])|[^"])*`
       |> capture 1 (token EscapeChar)
+
+  let rule-string =
+    pattern `"(.*)"`
+      |> capture 0 (token String)
+      |> capture 1 (include rule-char-seq)
 
   let rule-default =
     pattern `\s+|\w+\s|.\s`
