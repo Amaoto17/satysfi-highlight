@@ -5,3 +5,7 @@ type token =
   | String
   | Comment
   | FunctionName
+  | LanguageConstant
+  | Constant
+  | TypeName
+  | Operator

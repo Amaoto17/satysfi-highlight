@@ -1,5 +1,6 @@
 @require: stdjabook
 @import: highlight
+@import: lang/ocaml
 
 
 document (|
@@ -9,7 +10,7 @@ document (|
   show-toc = false;
 |) '<
   +section{OCamlでの例} <
-    +code(
+    +code?:(OCaml.rule)(
 ```
 let foo = 1
 
@@ -31,6 +32,21 @@ let binary = 0b0011
 
 "hello, world"
 "hello, world\n"
+
+module Option : sig
+  type 'a t = None | Some of 'a
+  val return : 'a -> 'a t
+end = struct
+  type 'a t =
+    | None
+    | Some of 'a
+
+  let return x = Some x
+end
+
+(* Comment *)
+let f = ( * )
+let r = Option.return
 ```
     );
   >

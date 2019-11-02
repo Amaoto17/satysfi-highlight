@@ -11,9 +11,10 @@ end = struct
 
   let red    = Color.rgb 0.62 0.00 0.17
   let green  = Color.rgb 0.32 0.52 0.09
-  let blue   = Color.rgb 0.14 0.23 0.55
+  let blue   = Color.rgb 0.11 0.53 0.68
   let yellow = Color.rgb 0.64 0.51 0.02
   let gray   = Color.rgb 0.48 0.48 0.48
+  let orange = Color.rgb 0.85 0.46 0.06
 
   let foreground = Color.gray 0.18
 
@@ -25,5 +26,9 @@ end = struct
     | String -> green
     | Comment -> gray
     | FunctionName -> yellow
+    | LanguageConstant -> blue
+    | Constant -> blue
+    | TypeName -> orange
+    | Operator -> red
 
 end

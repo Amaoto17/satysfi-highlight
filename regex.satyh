@@ -39,6 +39,7 @@ type node =
   | Anchor of anchor
   | BackRef of int
   | Repeat of repeat * quantity * node
+  | Atomic of node
 
 
 type inst =
@@ -263,6 +264,10 @@ end = struct
         ; char `!` >>
           alt >>= (fun t -> (
             return (NegLookAhead t)
+          ))
+        ; char `>` >>
+          alt >>= (fun t -> (
+            return (Atomic t)
           ))
         ; char `:` >> alt
         ]
@@ -641,6 +646,12 @@ end = struct
               let () = for m (fun _ -> iter t) in
               for (n - m) (fun _ -> iter (Opt (quantity, t)))
         )
+      | Atomic t ->
+          let set-atomic-exec = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-atomic-exec (OpAtomicExec (t-begin, curpos ()))
     and emit-quantify emitter quantity =
       match quantity with
       | Greedy ->

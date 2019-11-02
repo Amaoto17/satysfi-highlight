@@ -1,17 +1,19 @@
 @require: vdecoset
 @require: deco
 @import: color-scheme
-@import: lang/ocaml
+@import: language
+
+open Language
 
 
 module Highlight : sig
 
-  direct +code : [string] block-cmd
+  direct +code : [rule?; string] block-cmd
 
 end = struct
 
-  let syntax-highlight ctx code =
-    Language.scan ctx OCaml.rule code
+  let syntax-highlight ctx rule code =
+    Language.scan ctx rule code
 
 
   let decoset-code = VDecoSet.empty
@@ -20,7 +22,7 @@ end = struct
     ctx |> set-font Latin (`lmmono`, 1., 0.)
         |> set-hyphen-penalty 100000
 
-  let scheme decoset txtcolor ctx code =
+  let scheme decoset txtcolor ctx ruleopt code =
     let pads = (0pt, 0pt, 8pt, 8pt) in
     block-frame-breakable ctx pads decoset (fun ctx -> (
       let fontsize = get-font-size ctx in
@@ -45,9 +47,14 @@ end = struct
             | Some _ -> inline-fil ++ discretionary 0 (inline-skip ((get-text-width ctx) *' 2.)) inline-nil inline-nil
             | None   -> inline-fil
           in
+          let content =
+            match ruleopt with
+            | None -> read-inline ctx-code (embed-string s)
+            | Some rule -> syntax-highlight ctx-code rule s
+          in
           let ib =
             inline-skip (charwid *' (float i))
-              ++ syntax-highlight ctx-code s
+              ++ content
               ++ ib-last
           in
           let ib-line =
@@ -62,9 +69,9 @@ end = struct
             let content =
               inline-fil
                 ++ read-inline ctx-line (embed-string line-str)
-                ++ inline-skip (charwid *' 6.)
+                ++ inline-skip (charwid *' 3.)
             in
-            inline-frame-fixed (charwid *' 12.) pads Deco.empty content
+            inline-frame-fixed (charwid *' 6.) pads Deco.empty content
           in
           ibacc ++ ib-line ++ ib
         )) inline-nil
@@ -72,7 +79,7 @@ end = struct
       line-break true true ctx ib-code
     ))
 
-  let-block ctx +code code =
-    scheme decoset-code ColorScheme.foreground ctx code
+  let-block ctx +code ?:ruleopt code =
+    scheme decoset-code ColorScheme.foreground ctx ruleopt code
 
 end
