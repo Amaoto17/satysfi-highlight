@@ -32,21 +32,6 @@ let binary = 0b0011
 
 "hello, world"
 "hello, world\n"
-
-module Option : sig
-  type 'a t = None | Some of 'a
-  val return : 'a -> 'a t
-end = struct
-  type 'a t =
-    | None
-    | Some of 'a
-
-  let return x = Some x
-end
-
-(* Comment *)
-let f = ( * )
-let r = Option.return
 ```
     );
   >

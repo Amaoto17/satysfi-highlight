@@ -1,4 +1,5 @@
 _obsolete/
+_sandbox/
 *.pdf
 *aux
 .DS_Store

@@ -2,38 +2,136 @@
 @import: parser
 @import: regex
 
-
-module Language : sig
-
-  type item
-  type rule
-
-  val pattern : string -> rule
-  val patterns : rule list -> rule
-  val capture : int -> (item -> item) -> rule -> rule
-  val token : token -> item -> item
-  val include : rule -> item -> item
-  val scan : context -> rule -> string -> inline-boxes
-
-end = struct
+open Parser
 
   type color-ctx =
     | Empty
     | Simple of color
-    | Nested of item list
+    % | Nested of item list
+    | Nested of submatch list
 
-  and item = match-data * color-ctx
+  and submatch = match-data * color-ctx
 
-  type rule = (item list) exec-ctx parser
+  % and item = match-data * color-ctx
+
+  type continuation =
+    | Done
+    | Continue of rule list
+
+  and rule = (submatch list * continuation) exec-ctx parser
+
+  % type rule = (item list) exec-ctx parser
+
+  type block-def = (|
+    enter : rule;
+    leave : rule;
+    inner-style : token option;
+    inner : rule list;
+  |)
+
+
+module Language : sig
+
+  % type submatch
+  % type rule
+  % type block-def
+
+  val pattern : string -> rule
+  val patterns : rule list -> rule
+  val pattern-block : block-def -> rule
+  val capture : int -> (submatch -> submatch) -> rule -> rule
+  val token : token -> submatch -> submatch
+  val include : rule -> submatch -> submatch
+  % val scan : context -> rule -> string -> inline-boxes
+  val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
+
+end = struct
 
   let pattern pat =
-    let p = Regex.compile pat in
-    p >>= (fun matched -> (
-      let item-list = matched |> List.map (fun data -> (data, Empty)) in
-      return item-list
+    let re = Regex.compile pat in
+    re >>= (fun matched -> (
+      let submatches = matched |> List.map (fun data -> (data, Empty)) in
+      return (submatches, Done)
     ))
 
+  % type continue =
+  %   | Done of item list
+  %   | Continue of rule
+
+  % let pattern pat =
+  %   let p = Regex.compile pat in
+  %   p >>= (fun matched -> (
+  %     let item-list = matched |> List.map (fun data -> (data, Empty)) in
+  %     return item-list
+  %   ))
+
   let patterns = choice
+
+  let list-rev-concat lst =
+    lst |> List.reverse |> List.concat
+
+  let pattern-block b =
+    let-rec iter acc lpos = fun st -> st |> run (
+      let color-ctx =
+        match b#inner-style with
+        | None -> Empty
+        | Some tok -> Simple (ColorScheme.color-of tok)
+      in
+      let done acc =
+        return (list-rev-concat acc, Done)
+      in
+      let continue acc stack =
+        let p = current-pos >>= (iter []) in
+        return (list-rev-concat acc, Continue (p :: stack))
+      in
+      let add-inner acc lpos rpos =
+        get >>= (fun st -> (
+          if lpos == rpos then return acc
+          else
+            let s = string-sub st#src lpos (rpos - lpos) in
+            let inner = (Some (lpos, rpos, s), color-ctx) in
+            return ([inner] :: acc)
+        ))
+      in
+      current-pos >>= (fun rpos -> (
+        choice [
+          eof >>
+          add-inner acc lpos rpos >>= (fun acc -> (
+            continue acc []
+          ))
+        ; b#leave >>= (fun (submatches-leave, _) -> (
+            add-inner acc lpos rpos >>= (fun acc -> (
+              done (submatches-leave :: acc)
+            ))
+          ))
+        % ; choice b#inner >>= (fun (submatches-inner, _) -> (
+        %     add-inner acc lpos rpos >>= (fun acc -> (
+        %       current-pos >>= (fun lpos -> (
+        %         iter (submatches-inner :: acc) lpos
+        %       ))
+        %     ))
+        %   ))
+        ; choice b#inner >>= (fun (submatches-inner, k) -> (
+            add-inner acc lpos rpos >>= (fun acc -> (
+              match k with
+              | Done -> (
+                  current-pos >>= (fun lpos -> (
+                    iter (submatches-inner :: acc) lpos
+                  ))
+                )
+              | Continue stack ->
+                  continue (submatches-inner :: acc) stack
+            ))
+          ))
+        ; any >> iter acc lpos
+        ]
+      ))
+    ) in
+    b#enter >>= (fun (submatches-enter, _) -> (
+      current-pos >>= (fun lpos -> (
+        iter [submatches-enter] lpos
+      ))
+    ))
 
   let list-nth-map n f lst =
     let-rec iter k lst =
@@ -45,28 +143,47 @@ end = struct
     in
     iter 0 lst
 
-  let capture n f t =
-    t >>= (fun item-list -> (
-      return (list-nth-map n f item-list)
+  % let capture n f t =
+  %   t >>= (fun item-list -> (
+  %     return (list-nth-map n f item-list)
+  %   ))
+
+  let capture n f p =
+    p >>= (fun (submatches, k) -> (
+      return (list-nth-map n f submatches, k)
     ))
 
-  let token tok item =
-    let (data, color-ctx) = item in
+  let token tok submatch =
+    let (data, color-ctx) = submatch in
     (data, Simple (ColorScheme.color-of tok))
 
-  let include rule item =
-    let (data, color-ctx) = item in
+  % let token tok item =
+  %   let (data, color-ctx) = item in
+  %   (data, Simple (ColorScheme.color-of tok))
+
+  let include rule submatch =
+    let (data, color-ctx) = submatch in
     match data with
-    | None -> item
+    | None -> submatch
     | Some (bpos, epos, s) -> (
         match parse exec-ctx-init rule s with
-        | None -> item
-        | Some (item-list, _) -> (data, Nested item-list)
+        | None -> submatch
+        | Some ((submatches, _), _) -> (data, Nested submatches)
       )
 
-  let serialize-item-list item-list =
-    let-rec iter acc offset item-list =
-      match item-list with
+  % let include rule item =
+  %   let (data, color-ctx) = item in
+  %   match data with
+  %   | None -> item
+  %   | Some (bpos, epos, s) -> (
+  %       match parse exec-ctx-init rule s with
+  %       | None -> item
+  %       | Some (item-list, _) -> (data, Nested item-list)
+  %     )
+
+  let serialize submatches =
+    let-rec iter acc offset submatches =
+      match submatches with
       | [] -> acc
       | (None, _) :: rest -> iter acc offset rest
       | (Some (bpos, epos, s), color-ctx) :: rest -> (
@@ -77,78 +194,214 @@ end = struct
           | Simple color ->
               let elem = (bpos + offset, epos + offset, s, Some color) in
               iter (elem :: acc) offset rest
-          | Nested item-list ->
-              let acc = iter acc (offset + bpos) item-list in
+          | Nested submatches ->
+              let acc = iter acc (offset + bpos) submatches in
               iter acc offset rest
         )
     in
-    iter [] 0 item-list |> List.reverse
+    iter [] 0 submatches |> List.reverse
 
-  let take-item-list-subset rpos item-list =
-    let-rec iter acc lst =
-      match lst with
+  % let serialize-item-list item-list =
+  %   let-rec iter acc offset item-list =
+  %     match item-list with
+  %     | [] -> acc
+  %     | (None, _) :: rest -> iter acc offset rest
+  %     | (Some (bpos, epos, s), color-ctx) :: rest -> (
+  %         match color-ctx with
+  %         | Empty ->
+  %             let elem = (bpos + offset, epos + offset, s, None) in
+  %             iter (elem :: acc) offset rest
+  %         | Simple color ->
+  %             let elem = (bpos + offset, epos + offset, s, Some color) in
+  %             iter (elem :: acc) offset rest
+  %         | Nested item-list ->
+  %             let acc = iter acc (offset + bpos) item-list in
+  %             iter acc offset rest
+  %       )
+  %   in
+  %   iter [] 0 item-list |> List.reverse
+
+  % let take-item-list-subset rpos item-list =
+  %   let-rec iter acc lst =
+  %     match lst with
+  %     | [] -> (List.reverse acc, [])
+  %     | item :: rest ->
+  %         let (_, epos, _, _) = item in
+  %         if epos <= rpos then iter (item :: acc) rest
+  %         else (List.reverse acc, lst)
+  %   in
+  %   iter [] item-list
+
+  let take-subset rpos submatches =
+    let-rec iter acc submatches =
+      match submatches with
       | [] -> (List.reverse acc, [])
-      | item :: rest ->
-          let (_, epos, _, _) = item in
-          if epos <= rpos then iter (item :: acc) rest
-          else (List.reverse acc, lst)
+      | submatch :: rest ->
+          let (_, epos, _, _) = submatch in
+          if epos <= rpos then iter (submatch :: acc) rest
+          else (List.reverse acc, submatches)
     in
-    iter [] item-list
+    iter [] submatches
 
   let set-text-color-opt color-opt ctx =
     match color-opt with
     | None -> ctx
     | Some color -> ctx |> set-text-color color
 
-  let read-inline-substr ctx src lpos rpos =
+  % let read-inline-substr ctx src lpos rpos =
+  %   if lpos == rpos then inline-nil
+  %   else
+  %     let substr = string-sub src lpos (rpos - lpos) in
+  %     read-inline ctx (embed-string substr)
+
+  let build-ib ctx src lpos rpos =
     if lpos == rpos then inline-nil
     else
-      let substr = string-sub src lpos (rpos - lpos) in
-      read-inline ctx (embed-string substr)
+      let s = string-sub src lpos (rpos - lpos) in
+      read-inline ctx (embed-string s)
 
-  let build-colored-ib ctx src item-list =
-    let-rec iter ctx acc lpos rpos item-list =
-      match item-list with
+  % let build-colored-ib ctx src item-list =
+  %   let-rec iter ctx acc lpos rpos item-list =
+  %     match item-list with
+  %     | [] ->
+  %         let ib-rest = read-inline-substr ctx src lpos rpos in
+  %         acc ++ ib-rest
+  %     | (bpos, epos, _, color-opt) :: rest ->
+  %         let ib-left = read-inline-substr ctx src lpos bpos in
+  %         let (subset, rest1) = take-item-list-subset epos rest in
+  %         let ctx1 = ctx |> set-text-color-opt color-opt in
+  %         let ib-mid = iter ctx1 inline-nil bpos epos subset in
+  %         iter ctx (acc ++ ib-left ++ ib-mid) epos rpos rest1
+  %   in
+  %   iter ctx inline-nil 0 (string-length src) item-list
+
+  let build-colored-ib ctx src submatches =
+    let-rec iter ctx acc lpos rpos submatches =
+      match submatches with
       | [] ->
-          let ib-rest = read-inline-substr ctx src lpos rpos in
+          let ib-rest = build-ib ctx src lpos rpos in
           acc ++ ib-rest
       | (bpos, epos, _, color-opt) :: rest ->
-          let ib-left = read-inline-substr ctx src lpos bpos in
-          let (subset, rest1) = take-item-list-subset epos rest in
+          let ib-left = build-ib ctx src lpos bpos in
+          let (subset, rest1) = take-subset epos rest in
           let ctx1 = ctx |> set-text-color-opt color-opt in
           let ib-mid = iter ctx1 inline-nil bpos epos subset in
           iter ctx (acc ++ ib-left ++ ib-mid) epos rpos rest1
     in
-    iter ctx inline-nil 0 (string-length src) item-list
+    iter ctx inline-nil 0 (string-length src) submatches
 
   % for debugging
-  let print-item-list ctx item-list =
-    let-rec iter acc lst =
-      match lst with
-      | [] -> acc
-      | (bpos, epos, s, _) :: rest ->
-          let msg = `[` ^ s ^ `:` ^ arabic bpos ^ `-` ^ arabic epos ^ `]` in
-          let ib = read-inline ctx (embed-string msg) in
-          iter (acc ++ ib) rest
-    in
-    iter inline-nil item-list
+  % let print-item-list ctx item-list =
+  %   let-rec iter acc lst =
+  %     match lst with
+  %     | [] -> acc
+  %     | (bpos, epos, s, _) :: rest ->
+  %         let msg = `[` ^ s ^ `:` ^ arabic bpos ^ `-` ^ arabic epos ^ `]` in
+  %         let ib = read-inline ctx (embed-string msg) in
+  %         iter (acc ++ ib) rest
+  %   in
+  %   iter inline-nil item-list
 
-  let scan ctx rule code =
-    let p = many rule |> map List.concat in
-    match parse exec-ctx-init p code with
+  let print-submatches submatches =
+    let-rec print submatch =
+      let (bpos, epos, s, _) = submatch in
+      let pos = arabic bpos ^ `-` ^ arabic epos in
+      let msg = `[` ^ s ^ `:` ^ pos ^ `]` in
+      display-message msg
+    in
+    let () = List.iter print submatches in submatches
+
+  % let scan ctx rule code =
+  %   % let p = many rule |> map List.concat in
+  %   let p =
+  %     let-rec iter acc = fun st -> st |> run (
+  %       choice [
+  %         rule >>= (fun item-list -> (
+  %           iter (item-list :: acc)
+  %         ))
+  %       ; any >> iter acc
+  %       ; return (acc |> List.reverse |> List.concat)
+  %       ]
+  %     ) in iter []
+  %   in
+  %   match parse exec-ctx-init p code with
+  %   | None ->
+  %       read-inline ctx (embed-string code)
+  %   | Some (item-list, st) ->
+  %       let ib =
+  %         serialize-item-list item-list
+  %           |> print-item-list
+  %           |> build-colored-ib ctx st#src
+  %           % |> (fun _ -> inline-nil)
+  %       in
+  %       let ib-rest =
+  %         let len = string-length st#src in
+  %         let rest = string-sub st#src st#offset (len - st#offset) in
+  %         read-inline ctx (embed-string rest)
+  %       in
+  %       ib
+
+  let highlight ctx stack-init rule code =
+    % let p-line =
+    %   let-rec iter acc stack k = fun st -> st |> run (
+    %     choice [
+    %       ( eof >> (
+    %           let new-stack =
+    %             match k with
+    %             | Done -> stack
+    %             | Continue p -> p :: stack
+    %           in
+    %           return (list-rev-concat acc, new-stack)
+    %         )
+    %       )
+    %     ; ( let (p, new-stack) =
+    %           match stack with
+    %           | [] -> (rule, [])
+    %           | top :: rest -> (top, rest)
+    %         in
+    %         p >>= (fun (submatches, k) -> (
+    %           iter (submatches :: acc) new-stack k
+    %         ))
+    %       )
+    %     ; any >> iter acc stack k
+    %     ]
+    %   ) in iter [] stack-init Done
+    % in
+    let p-line =
+      let-rec iter acc stack = fun st -> st |> run (
+        choice [
+          eof >>
+          return (list-rev-concat acc, stack)
+        ; ( match stack with
+            | [] -> (
+                rule >>= (fun (submatches, k) -> (
+                  match k with
+                  | Done -> iter (submatches :: acc) []
+                  | Continue stack1 -> iter (submatches :: acc) stack1
+                ))
+              )
+            | top :: rest -> (
+                top >>= (fun (submatches, k) -> (
+                  match k with
+                  | Done -> iter (submatches :: acc) rest
+                  | Continue stack1 -> iter (submatches :: acc) (list-rev-append stack1 rest)
+                ))
+              )
+          )
+        ; any >> iter acc stack
+        ]
+      ) in iter [] stack-init
+    in
+    match parse exec-ctx-init p-line code with
     | None ->
-        read-inline ctx (embed-string code)
-    | Some (item-list, st) ->
+        (read-inline ctx (embed-string code), stack-init)
+    | Some ((submatches, stack), st) -> (
         let ib =
-          serialize-item-list item-list
+          serialize submatches
+            |> print-submatches
             |> build-colored-ib ctx st#src
-            % |> print-item-list ctx
         in
-        let ib-rest =
-          let len = string-length st#src in
-          let rest = string-sub st#src st#offset (len - st#offset) in
-          read-inline ctx (embed-string rest)
-        in
-        ib ++ ib-rest
+        (ib, stack)
+      )
 
 end

@@ -30,6 +30,11 @@ let list-make n init =
   in
   iter [] 0
 
+let-rec list-rev-append xs ys =
+  match xs with
+  | [] -> ys
+  | x :: rest -> list-rev-append rest (x :: ys)
+
 let is-digit = string-contains `0123456789`
 let is-oct-digit = string-contains `01234567`
 let is-hex-digit = string-contains `0123456789abcdefABCDEF`
