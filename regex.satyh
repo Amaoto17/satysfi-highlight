@@ -62,14 +62,14 @@ type inst =
 
 type match-data = (int * int * string) option % begin, end, matched string
 
-type exec-ctx = (|
+type regex-vm-ctx = (|
   inst-seq : inst Vec.vec;
   pc : int;
   pos-stack : int list;
   matched : match-data list;
 |)
 
-let exec-ctx-init = (|
+let regex-vm-ctx-init = (|
   inst-seq = Vec.empty;
   pc = 0;
   pos-stack = [];
@@ -353,7 +353,7 @@ end
 
 module Exec : sig
 
-  val run : inst Vec.vec -> int -> (match-data list) exec-ctx parser
+  val run : inst Vec.vec -> int -> (match-data list) regex-vm-ctx parser
 
 end = struct
 
@@ -539,7 +539,7 @@ end = struct
 
   let run inst-seq n-save =
     let ctx = (|
-      exec-ctx-init with
+      regex-vm-ctx-init with
         inst-seq = inst-seq;
         matched = list-make (n-save + 1) None;
     |) in
@@ -552,7 +552,7 @@ end
 
 module Regex : sig
 
-  val compile : string -> (match-data list) exec-ctx parser
+  val compile : string -> (match-data list) regex-vm-ctx parser
 
 end = struct
 

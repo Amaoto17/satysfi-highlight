@@ -13,10 +13,6 @@ module Highlight : sig
 
 end = struct
 
-  % let syntax-highlight ctx rule code =
-  %   Language.scan ctx rule code
-
-
   let decoset-code = VDecoSet.empty
 
   let set-code-font ctx =
@@ -80,64 +76,6 @@ end = struct
       in
       line-break true true ctx ib-code
     ))
-    
-
-  % let scheme decoset txtcolor ctx ruleopt code =
-  %   let pads = (0pt, 0pt, 8pt, 8pt) in
-  %   block-frame-breakable ctx pads decoset (fun ctx -> (
-  %     let fontsize = get-font-size ctx in
-  %     let ctx = ctx |> set-code-font in
-  %     let charwid = get-natural-width (read-inline ctx {0}) in
-  %     let ctx-code =
-  %       ctx |> set-space-ratio (charwid /' fontsize) 0. 0.
-  %           |> set-text-color txtcolor
-  %     in
-  %     let lstraw = split-into-lines code in
-  %     let lst =
-  %       match lstraw with
-  %       | []        -> lstraw
-  %       | x :: []   -> lstraw
-  %       | _ :: tail -> tail
-  %     in
-  %     let ib-code =
-  %       let-mutable line <- 1 in
-  %       lst |> List.fold-left-adjacent (fun ibacc (i, s) _ optnext -> (
-  %         let ib-last =
-  %           match optnext with
-  %           | Some _ -> inline-fil ++ discretionary 0 (inline-skip ((get-text-width ctx) *' 2.)) inline-nil inline-nil
-  %           | None   -> inline-fil
-  %         in
-  %         let content =
-  %           match ruleopt with
-  %           | None -> read-inline ctx-code (embed-string s)
-  %           | Some rule -> syntax-highlight ctx-code rule s
-  %         in
-  %         let ib =
-  %           inline-skip (charwid *' (float i))
-  %             ++ content
-  %             ++ ib-last
-  %         in
-  %         let ib-line =
-  %           let pads = (0pt, 0pt, 0pt, 0pt) in
-  %           let ctx-line =
-  %             ctx |> set-font-size 6pt
-  %                 |> set-manual-rising 1.5pt
-  %                 |> set-text-color txtcolor
-  %           in
-  %           let line-str = arabic !line in
-  %           let () = line <- !line + 1 in
-  %           let content =
-  %             inline-fil
-  %               ++ read-inline ctx-line (embed-string line-str)
-  %               ++ inline-skip (charwid *' 3.)
-  %           in
-  %           inline-frame-fixed (charwid *' 6.) pads Deco.empty content
-  %         in
-  %         ibacc ++ ib-line ++ ib
-  %       )) inline-nil
-  %     in
-  %     line-break true true ctx ib-code
-  %   ))
 
   let-block ctx +code ?:ruleopt code =
     scheme decoset-code ColorScheme.foreground ctx ruleopt code
