@@ -30,34 +30,32 @@ end = struct
         |> capture 0 (style NumericConstant)
     ]
 
+  let rule-escape-char =
+    pattern `\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ])`
+      |> capture 0 (style EscapeChar)
+
   let rule-string =
-    pattern-block (|
-      enter =
-        pattern `"`
-          |> capture 0 (style Operator)
-    ; leave =
-        pattern `"`
-          |> capture 0 (style Operator)
-    ; inner-style = Some (String)
-    ; inner = [
-        pattern `\\[\\"n]`
-          |> capture 0 (style EscapeChar)
-      ]
-    |)
+    patterns [
+      pattern-block (|
+        enter = pattern `(?=[^\\])"`
+      ; leave = pattern `"`
+      ; style = Some (String)
+      ; inner = [rule-escape-char]
+      |)
+    ; pattern-block (|
+        enter = pattern `\{[a-z_]*\|`
+      ; leave = pattern `\|[a-z_]*\}`
+      ; style = Some (String)
+      ; inner = []
+      |)
+    ]
 
   let rule-comment =
     pattern-block (|
-      enter =
-        pattern `\(\*`
-          |> capture 0 (style Comment)
-    ; leave =
-        pattern `\*\)`
-          |> capture 0 (style Comment)
-    ; inner-style = Some (Comment)
-    ; inner = [
-        pattern `".*"`
-          |> capture 0 (include rule-string)
-      ]
+      enter = pattern `\(\*`
+    ; leave = pattern `\*\)`
+    ; style = Some (Comment)
+    ; inner = []
     |)
 
   % let rule-integer =

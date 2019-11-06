@@ -21,7 +21,7 @@ and rule = (submatch list * continuation) regex-vm-ctx parser
 type block-def = (|
   enter : rule;
   leave : rule;
-  inner-style : style option;
+  style : style option;
   inner : rule list;
 |)
 
@@ -51,57 +51,50 @@ end = struct
     lst |> List.reverse |> List.concat
 
   let pattern-block b =
+    let color-ctx =
+      match b#style with
+      | None -> Empty
+      | Some tok -> Simple (ColorScheme.color-of tok)
+    in
     let-rec iter acc lpos = fun st -> st |> run (
-      let color-ctx =
-        match b#inner-style with
-        | None -> Empty
-        | Some tok -> Simple (ColorScheme.color-of tok)
-      in
-      let done acc =
-        return (list-rev-concat acc, Done)
-      in
-      let continue acc stack =
-        let p = current-pos >>= (iter []) in
-        return (list-rev-concat acc, Continue (p :: stack))
-      in
-      let add-inner acc lpos rpos =
-        get >>= (fun st -> (
-          if lpos == rpos then return acc
+      let entire-match =
+        current-pos >>= (fun rpos -> (
+          if lpos == rpos then return []
           else
             let s = string-sub st#src lpos (rpos - lpos) in
-            let inner = (Some (lpos, rpos, s), color-ctx) in
-            return ([inner] :: acc)
+            return [(Some (lpos, rpos, s), color-ctx)]
         ))
       in
-      current-pos >>= (fun rpos -> (
-        choice [
-          eof >>
-          add-inner acc lpos rpos >>= (fun acc -> (
-            continue acc []
-          ))
-        ; b#leave >>= (fun (submatches-leave, _) -> (
-            add-inner acc lpos rpos >>= (fun acc -> (
-              done (submatches-leave :: acc)
-            ))
-          ))
-        ; choice b#inner >>= (fun (submatches-inner, k) -> (
-            add-inner acc lpos rpos >>= (fun acc -> (
-              match k with
-              | Done -> (
-                  current-pos >>= (fun lpos -> (
-                    iter (submatches-inner :: acc) lpos
-                  ))
-                )
-              | Continue stack ->
-                  continue (submatches-inner :: acc) stack
-            ))
-          ))
-        ; any >> iter acc lpos
-        ]
-      ))
+      let done acc =
+        entire-match >>= (fun entire -> (
+          let submatches = List.concat (entire :: (List.reverse acc)) in
+          return (submatches, Done)
+        ))
+      in
+      let continue acc stack =
+        entire-match >>= (fun entire -> (
+          let p = current-pos >>= (iter []) in
+          let submatches = List.concat (entire :: (List.reverse acc)) in
+          return (submatches, Continue (p :: stack))
+        ))
+      in
+      choice [
+        eof >> continue acc []
+      ; b#leave >>= (fun (submatches-leave, _) -> (
+          done (submatches-leave :: acc)
+        ))
+      ; choice b#inner >>= (fun (submatches-inner, k) -> (
+          match k with
+          | Done ->
+              iter (submatches-inner :: acc) lpos
+          | Continue stack ->
+              continue (submatches-inner :: acc) stack
+        ))
+      ; any >> iter acc lpos
+      ]
     ) in
-    b#enter >>= (fun (submatches-enter, _) -> (
-      current-pos >>= (fun lpos -> (
+    current-pos >>= (fun lpos -> (
+      b#enter >>= (fun (submatches-enter, _) -> (
         iter [submatches-enter] lpos
       ))
     ))
@@ -200,6 +193,7 @@ end = struct
       let msg = `[` ^ s ^ `:` ^ pos ^ `]` in
       display-message msg
     in
+    let () = display-message ` ` in
     let () = List.iter print submatches in submatches
 
   let highlight ctx stack-init rule code =
