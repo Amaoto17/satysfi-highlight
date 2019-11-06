@@ -1,7 +1,7 @@
-@import: ../token
-@import: ../language
+@import: ../style
+@import: ../syntax
 
-open Language
+open Syntax
 
 
 module OCaml : sig
@@ -12,36 +12,36 @@ end = struct
 
   let rule-let =
     pattern `(let(?:\s+rec)?|and)\s+([\w']+)`
-      |> capture 1 (token Keyword)
-      |> capture 2 (token FunctionName)
+      |> capture 1 (style Keyword)
+      |> capture 2 (style FunctionName)
 
   % let rule-char-seq =
   %   pattern `(?:(\\[nrt])|[^"])*`
-  %     |> capture 1 (token EscapeChar)
+  %     |> capture 1 (style EscapeChar)
 
   % let rule-string =
   %   pattern `"(.*?)"`
-  %     |> capture 0 (token String)
+  %     |> capture 0 (style String)
   %     |> capture 1 (include rule-char-seq)
 
   let rule-integer =
     patterns [
       pattern `-?\d[\d_]*`
-        |> capture 0 (token NumericConstant)
+        |> capture 0 (style NumericConstant)
     ]
 
   let rule-string =
     pattern-block (|
       enter =
         pattern `"`
-          |> capture 0 (token Operator)
+          |> capture 0 (style Operator)
     ; leave =
         pattern `"`
-          |> capture 0 (token Operator)
-    ; inner-style = (Some (String))
+          |> capture 0 (style Operator)
+    ; inner-style = Some (String)
     ; inner = [
         pattern `\\[\\"n]`
-          |> capture 0 (token EscapeChar)
+          |> capture 0 (style EscapeChar)
       ]
     |)
 
@@ -49,11 +49,11 @@ end = struct
     pattern-block (|
       enter =
         pattern `\(\*`
-          |> capture 0 (token Comment)
+          |> capture 0 (style Comment)
     ; leave =
         pattern `\*\)`
-          |> capture 0 (token Comment)
-    ; inner-style = (Some (Comment))
+          |> capture 0 (style Comment)
+    ; inner-style = Some (Comment)
     ; inner = [
         pattern `".*"`
           |> capture 0 (include rule-string)
@@ -63,50 +63,50 @@ end = struct
   % let rule-integer =
   %   patterns [
   %     pattern `-?\d[\d_]*`
-  %       |> capture 0 (token NumericConstant)
+  %       |> capture 0 (style NumericConstant)
   %   ; pattern `-?0[oO][0-7][0-7_]*`
-  %       |> capture 0 (token NumericConstant)
+  %       |> capture 0 (style NumericConstant)
   %   ; pattern `-?0[xX]\h[\h_]*`
-  %       |> capture 0 (token NumericConstant)
+  %       |> capture 0 (style NumericConstant)
   %   ; pattern `-?0[bB][01][01_]*`
-  %       |> capture 0 (token NumericConstant)
+  %       |> capture 0 (style NumericConstant)
   %   ]
 
   % let rule-builtin-type =
   %   pattern `\b(string|unit|int)\b`
-  %     |> capture 0 (token TypeName)
+  %     |> capture 0 (style TypeName)
 
   % let rule-open =
   %   pattern `\b(open)\s+[A-Z][\w']*`
-  %     |> capture 1 (token Keyword)
+  %     |> capture 1 (style Keyword)
 
   % let rule-boolean =
   %   pattern `\b(true|false)\b`
-  %     |> capture 0 (token LanguageConstant)
+  %     |> capture 0 (style LanguageConstant)
 
   % let rule-keyword =
   %   pattern `\b(if|then|else|in|module|sig|struct|val|end|type|of|exception|fun|function|begin|match|with|open)\b`
-  %     |> capture 0 (token Keyword)
+  %     |> capture 0 (style Keyword)
 
   % let rule-operator =
   %   pattern `@@|\|>|=`
-  %     |> capture 0 (token Operator)
+  %     |> capture 0 (style Operator)
 
   % % let rule-constr =
   % %   pattern `[A-Z][\w']*+(?!\.)`
-  % %     |> capture 0 (token Constant)
+  % %     |> capture 0 (style Constant)
 
   % let rule-constr =
   %   pattern `(?>[A-Z][\w']*)(?!\.)`
-  %     |> capture 0 (token Constant)
+  %     |> capture 0 (style Constant)
 
   % % let rule-comment =
   % %   pattern `\(\*\s+.*\s+\*\)`
-  % %     |> capture 0 (token Comment)
+  % %     |> capture 0 (style Comment)
 
   % let rule-comment =
   %   pattern `(?>\(\*).*(?>\*\))`
-  %     |> capture 0 (token Comment)
+  %     |> capture 0 (style Comment)
 
   % let rule-skip =
   %   pattern `\s+|\w+\s*|.\s*`

@@ -1,4 +1,4 @@
-@import: token
+@import: style
 @import: parser
 @import: regex
 
@@ -21,18 +21,18 @@ and rule = (submatch list * continuation) regex-vm-ctx parser
 type block-def = (|
   enter : rule;
   leave : rule;
-  inner-style : token option;
+  inner-style : style option;
   inner : rule list;
 |)
 
 
-module Language : sig
+module Syntax : sig
 
   val pattern : string -> rule
   val patterns : rule list -> rule
   val pattern-block : block-def -> rule
   val capture : int -> (submatch -> submatch) -> rule -> rule
-  val token : token -> submatch -> submatch
+  val style : style -> submatch -> submatch
   val include : rule -> submatch -> submatch
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
@@ -121,7 +121,7 @@ end = struct
       return (list-nth-map n f submatches, k)
     ))
 
-  let token tok submatch =
+  let style tok submatch =
     let (data, color-ctx) = submatch in
     (data, Simple (ColorScheme.color-of tok))
 

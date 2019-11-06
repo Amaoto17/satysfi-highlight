@@ -1,11 +1,11 @@
 @require: color
-@import: token
+@import: style
 
 
 module ColorScheme: sig
 
   val foreground : color
-  val color-of : token -> color
+  val color-of : style -> color
 
 end = struct
 
@@ -18,8 +18,8 @@ end = struct
 
   let foreground = Color.gray 0.18
 
-  let color-of token =
-    match token with
+  let color-of style =
+    match style with
     | Keyword -> red
     | NumericConstant -> green
     | EscapeChar -> blue

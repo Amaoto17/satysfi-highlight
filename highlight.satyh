@@ -2,9 +2,7 @@
 @require: deco
 @require: pervasives
 @import: color-scheme
-@import: language
-
-open Language
+@import: syntax
 
 
 module Highlight : sig
@@ -63,7 +61,7 @@ end = struct
             | None ->
                 (read-inline ctx-code (embed-string s), [])
             | Some rule ->
-                Language.highlight ctx-code stack rule s
+                Syntax.highlight ctx-code stack rule s
           in
           let ib =
             ib-line
