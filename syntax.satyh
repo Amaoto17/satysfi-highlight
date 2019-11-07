@@ -28,6 +28,7 @@ type block-def = (|
 
 module Syntax : sig
 
+  val run : 'a 'u parser -> 'u state -> ('a * 'u state) option % for eta expansion
   val pattern : string -> rule
   val patterns : rule list -> rule
   val pattern-block : block-def -> rule
@@ -37,6 +38,8 @@ module Syntax : sig
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
 end = struct
+
+  let run = Parser.run
 
   let pattern pat =
     let re = Regex.compile pat in
@@ -114,18 +117,31 @@ end = struct
       return (list-nth-map n f submatches, k)
     ))
 
-  let style tok submatch =
+  let style sty submatch =
     let (data, color-ctx) = submatch in
-    (data, Simple (ColorScheme.color-of tok))
+    (data, Simple (ColorScheme.color-of sty))
 
   let include rule submatch =
+    let p =
+      let-rec iter acc = fun st -> st |> run (
+        choice [
+          eof >> return (list-rev-concat acc)
+        ; rule >>= (fun (submatches, k) -> (
+            match k with
+            | Done -> iter (submatches :: acc)
+            | Continue _ -> iter acc
+          ))
+        ; any >> iter acc
+        ]
+      ) in iter []
+    in
     let (data, color-ctx) = submatch in
     match data with
     | None -> submatch
     | Some (bpos, epos, s) -> (
-        match parse regex-vm-ctx-init rule s with
+        match parse regex-vm-ctx-init p s with
         | None -> submatch
-        | Some ((submatches, _), _) -> (data, Nested submatches)
+        | Some (submatches, _) -> (data, Nested submatches)
       )
 
   let serialize submatches =
@@ -200,8 +216,7 @@ end = struct
     let p-line =
       let-rec iter acc stack = fun st -> st |> run (
         choice [
-          eof >>
-          return (list-rev-concat acc, stack)
+          eof >> return (list-rev-concat acc, stack)
         ; ( match stack with
             | [] -> (
                 rule >>= (fun (submatches, k) -> (
@@ -228,7 +243,7 @@ end = struct
     | Some ((submatches, stack), st) -> (
         let ib =
           serialize submatches
-            |> print-submatches
+            % |> print-submatches
             |> build-colored-ib ctx st#src
         in
         (ib, stack)

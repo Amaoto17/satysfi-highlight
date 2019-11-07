@@ -675,6 +675,6 @@ end = struct
   let compile pat =
     match easy-parse Syntax.re pat with
     | Some ast -> build ast
-    | None -> fail
+    | None -> let () = display-message `compile error` in fail
 
 end

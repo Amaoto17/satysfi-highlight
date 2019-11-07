@@ -10,29 +10,21 @@ module OCaml : sig
 
 end = struct
 
-  let rule-let =
-    pattern `(let(?:\s+rec)?|and)\s+([\w']+)`
-      |> capture 1 (style Keyword)
-      |> capture 2 (style FunctionName)
+  let rule-comment =
+    pattern-block (|
+      enter = pattern `\(\*`
+    ; leave = pattern `\*\)`
+    ; style = Some (Comment)
+    ; inner = []
+    |)
 
-  % let rule-char-seq =
-  %   pattern `(?:(\\[nrt])|[^"])*`
-  %     |> capture 1 (style EscapeChar)
-
-  % let rule-string =
-  %   pattern `"(.*?)"`
-  %     |> capture 0 (style String)
-  %     |> capture 1 (include rule-char-seq)
-
-  let rule-integer =
+  let rule-string-char =
     patterns [
-      pattern `-?\d[\d_]*`
-        |> capture 0 (style NumericConstant)
+      pattern `\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ])`
+        |> capture 0 (style EscapeChar)
+    ; pattern `\\u\{\h+\}`
+        |> capture 0 (style EscapeChar)
     ]
-
-  let rule-escape-char =
-    pattern `\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ])`
-      |> capture 0 (style EscapeChar)
 
   let rule-string =
     patterns [
@@ -40,7 +32,7 @@ end = struct
         enter = pattern `(?=[^\\])"`
       ; leave = pattern `"`
       ; style = Some (String)
-      ; inner = [rule-escape-char]
+      ; inner = [rule-string-char]
       |)
     ; pattern-block (|
         enter = pattern `\{[a-z_]*\|`
@@ -50,86 +42,61 @@ end = struct
       |)
     ]
 
-  let rule-comment =
-    pattern-block (|
-      enter = pattern `\(\*`
-    ; leave = pattern `\*\)`
-    ; style = Some (Comment)
-    ; inner = []
-    |)
+  let rule-integer =
+    patterns [
+      pattern `-?0[xX]\h[\h_]*[lLn]?`
+        |> capture 0 (style NumericConstant)
+    ; pattern `-?0[oO][0-7][0-7_]*[lLn]?`
+        |> capture 0 (style NumericConstant)
+    ; pattern `-?0[bB][01][01_]*[lLn]?`
+        |> capture 0 (style NumericConstant)
+    ; pattern `-?\d[\d_]*[lLn]?`
+        |> capture 0 (style NumericConstant)
+    ]
 
-  % let rule-integer =
-  %   patterns [
-  %     pattern `-?\d[\d_]*`
-  %       |> capture 0 (style NumericConstant)
-  %   ; pattern `-?0[oO][0-7][0-7_]*`
-  %       |> capture 0 (style NumericConstant)
-  %   ; pattern `-?0[xX]\h[\h_]*`
-  %       |> capture 0 (style NumericConstant)
-  %   ; pattern `-?0[bB][01][01_]*`
-  %       |> capture 0 (style NumericConstant)
-  %   ]
+  let rule-float =
+    patterns [
+      pattern `-?0[xX]\h[\h_]*(\.[\h_]*)?([pP][\-+]?\d[\d_]*)?`
+        |> capture 0 (style NumericConstant)
+    ; pattern `-?\d[\d_]*(\.[\d_]*)?([eE][\-+]?\d[\d_]*)?`
+        |> capture 0 (style NumericConstant)
+    ]
 
-  % let rule-builtin-type =
-  %   pattern `\b(string|unit|int)\b`
-  %     |> capture 0 (style TypeName)
+  let rule-character =
+    pattern `'(.|\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ]))'`
+      |> capture 0 (style CharacterConstant)
 
-  % let rule-open =
-  %   pattern `\b(open)\s+[A-Z][\w']*`
-  %     |> capture 1 (style Keyword)
+  let rule-constants =
+    patterns [
+      pattern `\b(true|false)\b`
+        |> capture 0 (style LanguageConstant)
+    ; rule-float
+    ; rule-integer
+    ; rule-character
+    ]
 
-  % let rule-boolean =
-  %   pattern `\b(true|false)\b`
-  %     |> capture 0 (style LanguageConstant)
+  let rule-directives =
+    pattern `#\d+(?:"(.*)")?`
+      |> capture 0 (style Keyword)
+      |> capture 1 (include rule-string-char)
 
-  % let rule-keyword =
-  %   pattern `\b(if|then|else|in|module|sig|struct|val|end|type|of|exception|fun|function|begin|match|with|open)\b`
-  %     |> capture 0 (style Keyword)
-
-  % let rule-operator =
-  %   pattern `@@|\|>|=`
-  %     |> capture 0 (style Operator)
-
-  % % let rule-constr =
-  % %   pattern `[A-Z][\w']*+(?!\.)`
-  % %     |> capture 0 (style Constant)
-
-  % let rule-constr =
-  %   pattern `(?>[A-Z][\w']*)(?!\.)`
-  %     |> capture 0 (style Constant)
-
-  % % let rule-comment =
-  % %   pattern `\(\*\s+.*\s+\*\)`
-  % %     |> capture 0 (style Comment)
-
-  % let rule-comment =
-  %   pattern `(?>\(\*).*(?>\*\))`
-  %     |> capture 0 (style Comment)
-
-  % let rule-skip =
-  %   pattern `\s+|\w+\s*|.\s*`
-
-  % let rule =
-  %   patterns [
-  %     rule-let
-  %   ; rule-integer
-  %   ; rule-string
-  %   ; rule-builtin-type
-  %   ; rule-open
-  %   ; rule-boolean
-  %   ; rule-keyword
-  %   ; rule-operator
-  %   ; rule-constr
-  %   ; rule-comment
-  %   ; rule-skip
-  %   ]
+  let rule-operator =
+    patterns [
+      pattern `\b(mod|land|lor|lxor|lsl|lsr|asr)\b`
+        |> capture 0 (style Keyword)
+    ; pattern `[=<>@^|\&+\-*/$%][!$%\&*+\-./:<=>?@^|~]*|#[!$%\&*+\-./:<=>?@^|~]+`
+        |> capture 0 (style Operator)
+    ; pattern `![!$%\&*+\-./:<=>?@^|~]*|[?~][!$%\&*+\-./:<=>?@^|~]+`
+        |> capture 0 (style Operator)
+    ]
 
   let rule =
     patterns [
-      rule-let
-    ; rule-integer
+      rule-comment
     ; rule-string
-    ; rule-comment
+    ; rule-constants
+    ; rule-directives
+    ; rule-operator
     ]
 
 end

@@ -9,3 +9,9 @@ type style =
   | Constant
   | TypeName
   | Operator
+  | ModuleName
+  | Punctuation
+  | Variable
+  | Storage
+  | Meta
+  | CharacterConstant

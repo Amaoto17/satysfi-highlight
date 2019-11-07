@@ -30,5 +30,11 @@ end = struct
     | Constant -> blue
     | TypeName -> orange
     | Operator -> red
+    | Punctuation -> red
+    | ModuleName -> orange
+    | Variable -> foreground
+    | Storage -> foreground
+    | Meta -> foreground
+    | CharacterConstant -> blue
 
 end

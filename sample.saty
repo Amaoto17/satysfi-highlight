@@ -12,26 +12,46 @@ document (|
   +section{OCamlでの例} <
     +code?:(OCaml.rule)(
 ```
-let foo = 1
+(* oneline comment *)
 
-let rec is_odd n =
-  if n = 0 then false else is_even (n - 1)
+(*
+  multi
+  line
+  comment
+*)
 
-and is_even n =
-  if n = 0 then true else is_odd (n - 1)
+let s0 = "abc"
+let s1 = "abc\n"
+let s2 = {|abc|}
+let s3 = {id|abc|id}
+let s4 = "\u{1Af}"
 
-let f x = let y = 1 in x + y
+let module A = Array
 
-let decimal = -123_456_789
+let open Main.Bytecomp.Ast
 
-let octal = 0o123
+let f0 = 123.45
+let f1 = 123.
+let f2 = 0.45e1_234
+let f3 = 12.e-9
 
-let hexadecimal = 0xA0f1
+let c0 = 'a'
+let c1 = '\x1b'
+let c2 = '\012'
+let c3 = '\n'
 
-let binary = 0b0011
+let rec is_even n =
+  if n = 0 then true else odd @@ n - 1
 
-"hello, world"
-"hello, world\n"
+and odd = function
+  | 0 -> false
+  | n -> even (n - 1)
+
+#000
+#000"abc\n"
+
+let (>>) p p' =
+  p >>= fun _ -> p'
 ```
     );
   >
