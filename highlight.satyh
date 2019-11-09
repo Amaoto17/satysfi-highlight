@@ -4,6 +4,8 @@
 @import: color-scheme
 @import: syntax
 
+open Syntax
+
 
 module Highlight : sig
 

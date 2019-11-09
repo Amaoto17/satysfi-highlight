@@ -11,7 +11,7 @@ let string-contains s c =
 
 let string-index s init-pos c =
   let-rec iter k =
-    if k == string-length s then -1
+    if k == string-length s then k
     else
       let c1 = string-sub s k 1 in
       if string-same c1 c then k else iter (k + 1)

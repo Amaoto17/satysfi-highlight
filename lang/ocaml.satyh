@@ -18,7 +18,7 @@ end = struct
     ; inner = []
     |)
 
-  let rule-string-char =
+  let rule-escape-string =
     patterns [
       pattern `\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ])`
         |> capture 0 (style EscapeChar)
@@ -32,7 +32,7 @@ end = struct
         enter = pattern `(?=[^\\])"`
       ; leave = pattern `"`
       ; style = Some (String)
-      ; inner = [rule-string-char]
+      ; inner = [rule-escape-string]
       |)
     ; pattern-block (|
         enter = pattern `\{[a-z_]*\|`
@@ -76,9 +76,9 @@ end = struct
     ]
 
   let rule-directives =
-    pattern `#\d+(?:"(.*)")?`
+    pattern `#\d+(?:"(.*?)")?`
       |> capture 0 (style Keyword)
-      |> capture 1 (include rule-string-char)
+      |> capture 1 (include rule-escape-string)
 
   let rule-operator =
     patterns [

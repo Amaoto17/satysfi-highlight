@@ -5,39 +5,41 @@
 open Parser
 
 
-type color-ctx =
-  | Empty
-  | Simple of color
-  | Nested of submatch list
-
-and submatch = match-data * color-ctx
-
-type continuation =
-  | Done
-  | Continue of rule list
-
-and rule = (submatch list * continuation) regex-vm-ctx parser
-
-type block-def = (|
-  enter : rule;
-  leave : rule;
-  style : style option;
-  inner : rule list;
-|)
-
-
 module Syntax : sig
+
+  type submatch
+  type rule
 
   val run : 'a 'u parser -> 'u state -> ('a * 'u state) option % for eta expansion
   val pattern : string -> rule
   val patterns : rule list -> rule
-  val pattern-block : block-def -> rule
+  val pattern-block : 'a -> rule
+    constraint 'a :: (|
+      enter : rule;
+      leave : rule;
+      style : style option;
+      inner : rule list;
+    |)
   val capture : int -> (submatch -> submatch) -> rule -> rule
   val style : style -> submatch -> submatch
   val include : rule -> submatch -> submatch
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
 end = struct
+
+  type color-ctx =
+    | Empty
+    | Simple of color
+    | Nested of submatch list
+
+  and submatch = match-data * color-ctx
+
+  type continuation =
+    | Done
+    | Continue of rule list
+
+  and rule = (submatch list * continuation) regex-vm-ctx parser
+  
 
   let run = Parser.run
 
