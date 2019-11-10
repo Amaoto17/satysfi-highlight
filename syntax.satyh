@@ -10,7 +10,7 @@ module Syntax : sig
   type submatch
   type rule
 
-  val run : 'a 'u parser -> 'u state -> ('a * 'u state) option % for eta expansion
+  val run : 'a parser -> Stream.t -> 'a parse-result % for eta expansion
   val pattern : string -> rule
   val patterns : rule list -> rule
   val pattern-block : 'a -> rule
@@ -38,14 +38,14 @@ end = struct
     | Done
     | Continue of rule list
 
-  and rule = (submatch list * continuation) regex-vm-ctx parser
+  and rule = (submatch list * continuation) parser
   
 
   let run = Parser.run
 
   let pattern pat =
     let re = Regex.compile pat in
-    re >>= (fun matched -> (
+    attempt re >>= (fun matched -> (
       let submatches = matched |> List.map (fun data -> (data, Empty)) in
       return (submatches, Done)
     ))
@@ -66,7 +66,7 @@ end = struct
         current-pos >>= (fun rpos -> (
           if lpos == rpos then return []
           else
-            let s = string-sub st#src lpos (rpos - lpos) in
+            let s = string-sub (Stream.source st) lpos (rpos - lpos) in
             return [(Some (lpos, rpos, s), color-ctx)]
         ))
       in
@@ -141,9 +141,9 @@ end = struct
     match data with
     | None -> submatch
     | Some (bpos, epos, s) -> (
-        match parse regex-vm-ctx-init p s with
-        | None -> submatch
-        | Some (submatches, _) -> (data, Nested submatches)
+        match parse p (Some regex-vm-init) s with
+        | Error _ -> submatch
+        | Ok submatches -> (data, Nested submatches)
       )
 
   let serialize submatches =
@@ -203,7 +203,7 @@ end = struct
     in
     iter ctx inline-nil 0 (string-length src) submatches
 
-  % for debugging
+  % for debug
   let print-submatches submatches =
     let-rec print submatch =
       let (bpos, epos, s, _) = submatch in
@@ -239,14 +239,14 @@ end = struct
         ]
       ) in iter [] stack-init
     in
-    match parse regex-vm-ctx-init p-line code with
-    | None ->
+    match parse p-line (Some regex-vm-init) code with
+    | Error _ ->
         (read-inline ctx (embed-string code), stack-init)
-    | Some ((submatches, stack), st) -> (
+    | Ok (submatches, stack) -> (
         let ib =
           serialize submatches
             % |> print-submatches
-            |> build-colored-ib ctx st#src
+            |> build-colored-ib ctx code
         in
         (ib, stack)
       )

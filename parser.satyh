@@ -1,212 +1,390 @@
-@require: option
+@require: list
 @import: utils
+@import: regex-types
 
 
-type 'u state = (|
-  src : string;
-  offset : int;
-  user-state : 'u;
-|)
+type 'a 'b result =
+  | Ok of 'a
+  | Error of 'b
 
-type 'a 'u parser = 'u state -> ('a * 'u state) option
 
-module Parser : sig
+module Stream : sig
 
-  val return : 'a -> 'a 'u parser
-  val (>>=) : 'a 'u parser -> ('a -> 'b 'u parser) -> 'b 'u parser
-  val (>>) : 'a 'u parser -> 'b 'u parser -> 'b 'u parser
-  val (<<) : 'a 'u parser -> 'b 'u parser -> 'a 'u parser
-  val (<|>) : 'a 'u parser -> 'a 'u parser -> 'a 'u parser
-  val run : 'a 'u parser -> 'u state -> ('a * 'u state) option
-  val parse : 'u -> 'a 'u parser -> string -> ('a * 'u state) option
-  val easy-parse : 'a unit parser -> string -> 'a option
-  val get : ('u state) 'u parser
-  val get-state : 'u 'u parser
-  val put : 'u state -> unit 'u parser
-  val put-state : 'u -> unit 'u parser
-  val fail : 'a 'u parser
-  val current-pos : int 'u parser
-  val map : ('a -> 'b) -> 'a 'u parser -> 'b 'u parser
-  val look-ahead : 'a 'u parser -> 'a 'u parser
-  val not-followed-by : 'a 'u parser -> unit 'u parser
-  val choice : ('a 'u parser) list -> 'a 'u parser
-  val opt-with : 'a -> 'a 'u parser -> 'a 'u parser
-  val many : 'a 'u parser -> ('a list) 'u parser
-  val many1 : 'a 'u parser -> ('a list) 'u parser
-  val chainl : 'a 'u parser -> ('a -> 'a -> 'a) 'u parser -> 'a 'u parser
-  val satisfy : (string -> bool) -> string 'u parser
-  val string : string -> string 'u parser
-  val any : string 'u parser
-  val eof : unit 'u parser
-  val bof : unit 'u parser
-  val word-boundary : unit 'u parser
-  val non-word-boundary : unit 'u parser
-  val char : string -> string 'u parser
-  val none-of : string -> string 'u parser
-  val decimal : int 'u parser
+  type t
+
+  val create : regex-vm option -> string -> t
+  val position : t -> int
+  val uncons : t -> int -> (string * t) option
+  val source : t -> string
+  val get-custom : t -> regex-vm option
+  val set-custom : t -> regex-vm option -> t
 
 end = struct
 
-  let return x st = Some (x, st)
+  type t = (|
+    source : string;
+    offset : int;
+    custom : regex-vm option;
+  |)
 
-  let bind m f = fun st ->
-    Option.bind (m st) (fun (v, st1) -> (f v) st1)
+  
+  let create custom source = (|
+    source = source;
+    offset = 0;
+    custom = custom;
+  |)
+
+  let position st = st#offset
+
+  let source st = st#source
+
+  let uncons st len =
+    if st#offset + len > string-length st#source then None
+    else
+      let s = string-sub st#source st#offset len in
+      let offset = st#offset + len in
+      Some (s, (| st with offset = offset |))
+
+  let get-custom t = t#custom
+
+  let set-custom t custom = (| t with custom = custom |)
+
+end
+
+
+module Error : sig
+
+  type message
+  type t
+
+  val empty : int -> t
+  val unexpected : string -> int -> t
+  val expected : string -> int -> t
+  val problem : string -> int -> t
+  val add-expected : t -> string -> int -> t
+  val merge : t -> t -> t
+  val position : t -> int
+  val set-position : t -> int -> t
+  val format : t -> string * string * string
+
+end = struct
+
+  type message =
+    | Expected of string
+    | Unexpected of string
+    | Problem of string
+
+  type t = (|
+    err-pos  : int;
+    messages : message list;
+  |)
+
+  let empty pos = (|
+    err-pos  = pos;
+    messages = [];
+  |)
+
+  let unexpected msg pos = (|
+    err-pos  = pos;
+    messages = [Unexpected msg];
+  |)
+
+  let expected msg pos = (|
+    err-pos = pos;
+    messages = [Expected msg];
+  |)
+
+  let problem msg pos = (|
+    err-pos = pos;
+    messages = [Problem msg];
+  |)
+
+  let add-expected err msg pos = (|
+    err-pos  = pos;
+    messages = Expected msg :: err#messages
+  |)
+
+  let merge err1 err2 = (|
+    err-pos  = err2#err-pos;
+    messages = List.append err1#messages err2#messages;
+  |)
+
+  let position err = err#err-pos
+
+  let set-position err pos = (|
+    err with err-pos = pos;
+  |)
+
+  let string-concat sep xs =
+    match xs with
+    | [] -> ` `
+    | x :: rest -> List.fold-left (fun acc x -> acc ^ sep ^ x) x rest
+
+  let format t =
+    let-rec iter (unexp, exp, prob) messages =
+      match messages with
+      | [] ->
+          let msg-unexp =
+            match unexp with
+            | [] -> ` `
+            | msg :: _ -> #`unexpected `# ^ msg
+          in
+          let msg-exp =
+            #`expected `# ^ (string-concat #` or `# exp)
+          in
+          let msg-prob =
+            match prob with
+            | [] -> ` `
+            | msg :: _ -> msg
+          in
+          (msg-unexp, msg-exp, msg-prob)
+      | message :: rest -> (
+          match message with
+          | Unexpected msg -> iter ([msg], exp, prob) rest
+          | Expected msg -> iter (unexp, msg :: exp, prob) rest
+          | Problem msg -> iter (unexp, exp, [msg]) rest
+        )
+    in
+    iter ([], [], []) t#messages
+
+end
+
+
+type 'a parse-result =
+  | ConsumedOk  of 'a * Stream.t * Error.t
+  | ConsumedErr of Error.t
+  | EmptyOk     of 'a * Stream.t * Error.t
+  | EmptyErr    of Error.t
+
+type 'a parser = Stream.t -> 'a parse-result
+
+
+module Parser : sig
+
+  val run : 'a parser -> Stream.t -> 'a parse-result
+  val parse : 'a parser -> regex-vm option -> string -> 'a Error.t result
+  val return : 'a -> 'a parser
+  val (>>=) : 'a parser -> ('a -> 'b parser) -> 'b parser
+  val (>>) : 'a parser -> 'b parser -> 'b parser
+  val (<<) : 'a parser -> 'b parser -> 'a parser
+  val get : Stream.t parser
+  val put : Stream.t -> unit parser
+  val get-state : regex-vm parser
+  val put-state : regex-vm -> unit parser
+  val current-pos : int parser
+  val unexpected : string -> 'a parser
+  val problem : string -> 'a parser
+  val (<?>) : 'a parser -> string -> 'a parser
+  val (<|>) : 'a parser -> 'a parser -> 'a parser
+  val attempt : 'a parser -> 'a parser
+  val satisfy : (string -> bool) -> string parser
+  val string : string -> string parser
+  val look-ahead : 'a parser -> 'a parser
+  val not-followed-by : 'a parser -> unit parser
+  val any : string parser
+  val eof : unit parser
+  val bof : unit parser
+  val word-boundary : unit parser
+  val non-word-boundary : unit parser
+  val many : 'a parser -> ('a list) parser
+  val many1 : 'a parser -> ('a list) parser
+  val choice : ('a parser) list -> 'a parser
+  val opt-with : 'a -> 'a parser -> 'a parser
+  val chainl : 'a parser -> ('a -> 'a -> 'a) parser -> 'a parser
+  val char : string -> string parser
+  val one-of : string -> string parser
+  val none-of : string -> string parser
+  val digit-char : string parser
+  val decimal : int parser
+
+end = struct
+
+  let run p st = p st
+
+  let parse p custom-opt base =
+    let st = Stream.create custom-opt base in
+    match run p st with
+    | ConsumedOk (x, _, _) -> Ok x
+    | ConsumedErr err      -> Error err
+    | EmptyOk (x, _, _)    -> Ok x
+    | EmptyErr err         -> Error err
+
+  let return x st = EmptyOk (x, st, Error.empty (Stream.position st))
+
+  let bind p f st0 =
+    match p st0 with
+    | ConsumedOk (x1, st1, err1) -> (
+        match (f x1) st1 with
+        | ConsumedOk v -> ConsumedOk v
+        | ConsumedErr err -> ConsumedErr err
+        | EmptyOk (x2, st2, err2) -> ConsumedOk (x2, st2, Error.merge err1 err2)
+        | EmptyErr err2 -> ConsumedErr (Error.merge err1 err2)
+      )
+    | ConsumedErr err -> ConsumedErr err
+    | EmptyOk (x1, st1, err1) -> (
+        match (f x1) st1 with
+        | ConsumedOk v -> ConsumedOk v
+        | ConsumedErr err -> ConsumedErr err
+        | EmptyOk (x2, st2, err2) -> EmptyOk (x2, st2, Error.merge err1 err2)
+        | EmptyErr err2 -> EmptyErr (Error.merge err1 err2)
+      )
+    | EmptyErr err -> EmptyErr err
 
   let (>>=) = bind
 
   let (>>) p1 p2 = p1 >>= (fun _ -> p2)
 
-  let (<<) p1 p2 = p1 >>= (fun x -> p2 >> return x)
+  let (<<) p1 p2 = p1 >>= (fun x -> (p2 >> return x))
 
-  let (<|>) p1 p2 = fun st -> (
-    match p1 st with
-    | None -> p2 st
-    | Some x -> Some x
-  )
+  let get st = EmptyOk (st, st, Error.empty (Stream.position st))
 
-  let run p st = p st
+  let put st _ = EmptyOk ((), st, Error.empty (Stream.position st))
 
-  let parse ust p src =
-    p (| src = src; offset = 0; user-state = ust |)
+  let expected msg st = EmptyErr (Error.expected msg (Stream.position st))
 
-  let easy-parse p src =
-    parse () p src |> Option.map (fun (v, _) -> v)
+  let unexpected msg st = EmptyErr (Error.unexpected msg (Stream.position st))
 
-  let get = fun st -> Some (st, st)
+  let problem msg st = EmptyErr (Error.problem msg (Stream.position st))
 
-  let get-state = fun st -> Some (st#user-state, st)
-
-  let put st = fun _ -> Some ((), st)
-
-  let put-state ust =
+  let get-state =
     get >>= (fun st -> (
-      put (| st with user-state = ust |)
+      match Stream.get-custom st with
+      | None -> problem `parser doesn't have a custom state`
+      | Some custom -> return custom
     ))
 
-  let fail st = None
+  let put-state custom =
+    get >>= (fun st -> (put (Stream.set-custom st (Some custom))))
 
-  let current-pos = fun st -> st |> (
-    return st#offset
-  )
+  let current-pos =
+    get >>= (fun st -> return (Stream.position st))
 
-  let map f p = p >>= (fun x -> return (f x))
+  let empty st = EmptyErr (Error.empty (Stream.position st))
 
-  let look-ahead p = fun st -> (
+  let (<?>) p msg st =
     match p st with
-    | Some (x, _) -> Some (x, st)
-    | None -> None
-  )
+    | ConsumedOk v -> ConsumedOk v
+    | ConsumedErr err -> ConsumedErr (Error.add-expected err msg (Stream.position st))
+    | EmptyOk v -> EmptyOk v
+    | EmptyErr err -> EmptyErr (Error.add-expected err msg (Stream.position st))
 
-  let not-followed-by p = fun st -> (
+  let (<|>) p1 p2 st =
+    match p1 st with
+    | ConsumedOk v -> ConsumedOk v
+    | ConsumedErr err -> ConsumedErr err
+    | EmptyOk v -> EmptyOk v
+    | EmptyErr err -> (
+        match p2 st with
+        | ConsumedOk v -> ConsumedOk v
+        | ConsumedErr err -> ConsumedErr err
+        | EmptyOk (x1, st1, err1) -> EmptyOk (x1, st1, Error.merge err err1)
+        | EmptyErr err1 -> EmptyErr (Error.merge err err1)
+      )
+
+  let map f p st =
     match p st with
-    | Some _ -> None
-    | None -> Some ((), st)
-  )
+    | ConsumedOk (x, st1, err) -> ConsumedOk (f x, st1, err)
+    | ConsumedErr err -> ConsumedErr err
+    | EmptyOk (x, st1, err) -> EmptyOk (f x, st1, err)
+    | EmptyErr err -> EmptyErr err
 
-  let look-behind len p = fun st -> (
-    if st#offset < len then None
-    else
-      let st0 = (| st with offset = st#offset - len |) in
-      Option.map (fun (x, _) -> (x, st)) (p st0)
-  )
+  let attempt p st =
+    match p st with
+    | ConsumedOk v -> ConsumedOk v
+    | ConsumedErr err -> EmptyErr (Error.set-position err (Stream.position st))
+    | EmptyOk v -> EmptyOk v
+    | EmptyErr err -> EmptyErr err
 
-  let choice ps = List.fold-left (<|>) fail ps
+  let satisfy pred st =
+    match Stream.uncons st 1 with
+    | None -> EmptyErr (Error.unexpected `end of input` (Stream.position st))
+    | Some (c, st1) ->
+        if pred c then ConsumedOk (c, st1, Error.empty (Stream.position st))
+        else EmptyErr (Error.unexpected (`'` ^ c ^ `'`) (Stream.position st))
+
+  let string s st =
+    match Stream.uncons st (string-length s) with
+    | None -> EmptyErr (Error.unexpected `end of input` (Stream.position st))
+    | Some (s1, st1) ->
+        if string-same s1 s then ConsumedOk (s1, st1, Error.empty (Stream.position st))
+        else EmptyErr (Error.expected (`"` ^ s ^ `"`) (Stream.position st))
+
+  let look-ahead p =
+    get >>= (fun st -> (
+      p >>= (fun x -> (
+        put st >> return x
+      ))
+    ))
+
+  let not-followed-by p =
+    attempt (
+      ( attempt p >>
+        unexpected `following`
+      ) <|> return ()
+    )
+
+  let any = satisfy (fun _ -> true)
+
+  let eof = not-followed-by any <?> `end of input`
+
+  let bof =
+    current-pos >>= (fun pos -> (
+      if pos == 0 then return ()
+      else expected `beginning of input`
+    ))
+
+  let word-boundary =
+    get >>= (fun st -> (
+      let src = Stream.source st in
+      let curpos = Stream.position st in
+      let prev-is-word =
+        if curpos == 0 then true
+        else
+          let c = string-sub src (curpos - 1) 1 in
+          is-word-char c
+      in
+      let next-is-word =
+        if curpos == string-length src then false
+        else
+          let c = string-sub src curpos 1 in
+          is-word-char c
+      in
+      let xor l1 l2 = l1 && (not l2) || (not l1) && l2 in
+      if xor prev-is-word next-is-word then return ()
+      else expected `word boundary`
+    ))
+
+  let non-word-boundary =
+    not-followed-by word-boundary <?> `non-word boundary`
+
+  let-rec many p = many1 p <|> return []
+
+  and many1 p = p >>= (fun x -> (many p >>= (fun xs -> return (x :: xs))))
+
+  let choice ps = List.fold-left (<|>) empty ps
 
   let opt-with default p = p <|> return default
 
-  let-rec many p = fun st -> st |> (
-    many1 p <|> return []
-  )
-
-  and many1 p = fun st -> st |> (
-    p >>= (fun x -> (
-      many p >>= (fun xs -> (
-        return (x :: xs)
-      ))
-    ))
-  )
-
   let chainl p op =
     let-rec iter acc =
-      let aux =
-        op >>= (fun f -> (
-          p >>= (fun x -> (
-            iter (f acc x)
-          ))
-        ))
-      in
+      let aux = op >>= (fun f -> (p >>= (fun x -> iter (f acc x)))) in
       aux <|> return acc
     in
     p >>= iter
 
-  let uncons st len =
-    let srclen = string-length st#src in
-    if st#offset + len > srclen then None
-    else
-      let elem = string-sub st#src st#offset len in
-      let st1 = (| st with offset = st#offset + len |) in
-      Some (elem, st1)
+  let char c = satisfy (string-same c) <?> (`'` ^ c ^ `'`)
 
-  let satisfy f =
-    get >>= (fun st -> (
-      match uncons st 1 with
-      | None -> fail
-      | Some (elem, st1) ->
-          if f elem then put st1 >> return elem
-          else fail
-    ))
+  let one-of cs = satisfy (string-contains cs)
 
-  let string s =
-    let len = string-length s in
-    get >>= (fun st -> (
-      match uncons st len with
-      | None -> fail
-      | Some (elem, st1) ->
-          if string-same elem s then put st1 >> return elem
-          else fail
-    ))
-
-  let any = fun st -> st |> (
-    satisfy (fun _ -> true)
-  )
-
-  let eof = fun st -> st |> (
-    not-followed-by any
-  )
-
-  let bof st =
-    if st#offset == 0 then Some ((), st) else None
-
-  let word-char = satisfy is-word-char
-
-  let non-word-char = satisfy (negate is-word-char)
-
-  let skip p = p >> return ()
-
-  let word-boundary = fun st -> st |> (
-    choice [
-      bof <|> skip (look-behind 1 non-word-char) >>
-      skip (look-ahead word-char)
-    ; look-behind 1 word-char >>
-      eof <|> skip (look-ahead non-word-char)
-    ]
-  )
-
-  let non-word-boundary = fun st -> st |> (
-    not-followed-by word-boundary
-  )
-
-  let char c = satisfy (string-same c)
-
-  let none-of s = satisfy (fun c -> not (string-contains s c))
+  let none-of cs = satisfy (negate (string-contains cs))
 
   let digits p base =
     let digit = p |> map (string-index `0123456789` 0) in
     let f acc x = acc * base + x in
     many1 digit |> map (List.fold-left f 0)
 
-  let digit-char = satisfy is-digit
-
-  let decimal st = st |> digits digit-char 10
+  let digit-char = satisfy is-digit <?> `digit`
+  
+  let decimal = digits digit-char 10 <?> `decimal`
 
 end

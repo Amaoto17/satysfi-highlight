@@ -1,13 +1,13 @@
 module Vec : sig
 
-  type 'a vec
+  type 'a t
 
-  val empty : 'a vec
-  val size : 'a vec -> int
-  val get : 'a vec -> int -> 'a option
-  val push : 'a vec -> 'a -> 'a vec
-  val set : 'a vec -> int -> 'a -> 'a vec
-  val map : ('a -> 'b) -> 'a vec -> 'b vec
+  val empty : 'a t
+  val size : 'a t -> int
+  val get : 'a t -> int -> 'a option
+  val push : 'a t -> 'a -> 'a t
+  val set : 'a t -> int -> 'a -> 'a t
+  val map : ('a -> 'b) -> 'a t -> 'b t
 
 end = struct
 
@@ -15,7 +15,7 @@ end = struct
     | Empty
     | Node of 'a * 'a heap * 'a heap
 
-  type 'a vec = (|
+  type 'a t = (|
     heap : 'a heap;
     size : int;
   |)
