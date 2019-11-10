@@ -90,6 +90,95 @@ end = struct
         |> capture 0 (style Operator)
     ]
 
+  let rule-module-binding =
+    pattern `\b(let)\s+(module)\s+([A-Z][\w']*)\s*(=)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style Keyword)
+      |> capture 3 (style ModuleName)
+      |> capture 4 (style Punctuation)
+
+  let rule-module-open-binding =
+    pattern `\b(let)\s+(open)\s+([A-Z][\w']*(\.[A-Z][\w']*)*)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style Keyword)
+      |> capture 3 (style ModuleName)
+
+  let rule-let-function =
+    pattern `\b(let|and)\s+(?!\(\*)((rec\s+)([a-z_][a-zA-Z0-9_']*)\b|([a-z_][a-zA-Z0-9_']*|\([^)]+\))(?=\s)((?=\s*=\s*(?=fun(?:ction)\b))|(?!\s*=)))`
+      |> capture 1 (style Keyword)
+      |> capture 3 (style Keyword)
+      |> capture 4 (style FunctionName)
+
+  let rule-function =
+    pattern-block (|
+      enter =
+        pattern `\b(fun)\s`
+          |> capture 1 (style Keyword)
+    ; leave =
+        pattern `->`
+    ; style = None
+    ; inner = []
+    |)
+
+  let rule-match-patterns =
+    patterns [
+      pattern `\b_\b`
+    ; pattern `\|(?=\s*\S)`
+    ]
+
+  let rule-pattern-match =
+    pattern-block (|
+      enter =
+        pattern `\b(with|function)\b`
+    ; leave =
+        pattern `->|\b(when)\b|\s\|`
+          |> capture 1 (style Keyword)
+    ; style = None
+    ; inner = [
+        rule-comment
+      ; rule-match-patterns
+      ]
+    |)
+
+  let rule-module =
+    pattern `^[ \t]*(module)\s+([A-Z_][\w']*)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style ModuleName)
+
+  let rule-module-type =
+    pattern `^[ \t]*(module\s+type\s+)([A-Z][\w']*)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style ModuleName)
+
+  let rule-module-sig-inner =
+    patterns [
+      pattern-block (|
+        enter = 
+          pattern `(val)\s+([a-z_][\w']*)\s*(:)`
+            |> capture 1 (style Keyword)
+      ; leave =
+          pattern `(?=\b(type|val|external|class|module|end)\b|^\s*$)`
+      ; style = None
+      ; inner = [
+          rule-typedef
+        ]
+      |)
+    ]
+
+  let rule-module-signature =
+    pattern-block (|
+      enter =
+        pattern `\b(sig)\b`
+          |> capture 1 (style Keyword)
+    ; leave =
+        pattern `\b(end)\b`
+          |> capture 1 (style Keyword)
+    ; style = None
+    ; inner = [
+        rule-module-sig-inner
+      ]
+    |)
+
   let rule =
     patterns [
       rule-comment
@@ -97,6 +186,13 @@ end = struct
     ; rule-constants
     ; rule-directives
     ; rule-operator
+    ; rule-module-binding
+    ; rule-module-open-binding
+    ; rule-let-function
+    ; rule-function
+    ; rule-pattern-match
+    ; rule-module
+    ; rule-module-type
     ]
 
 end

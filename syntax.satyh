@@ -5,12 +5,22 @@
 open Parser
 
 
+type color-ctx =
+  | Empty
+  | Simple of color
+  | Nested of submatch list
+
+and submatch = match-data * color-ctx
+
+type continuation =
+  | Done
+  | Continue of rule list
+
+and rule = (submatch list * continuation) parser
+
+
 module Syntax : sig
 
-  type submatch
-  type rule
-
-  val run : 'a parser -> Stream.t -> 'a parse-result % for eta expansion
   val pattern : string -> rule
   val patterns : rule list -> rule
   val pattern-block : 'a -> rule
@@ -26,23 +36,7 @@ module Syntax : sig
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
 end = struct
-
-  type color-ctx =
-    | Empty
-    | Simple of color
-    | Nested of submatch list
-
-  and submatch = match-data * color-ctx
-
-  type continuation =
-    | Done
-    | Continue of rule list
-
-  and rule = (submatch list * continuation) parser
   
-
-  let run = Parser.run
-
   let pattern pat =
     let re = Regex.compile pat in
     attempt re >>= (fun matched -> (

@@ -338,7 +338,7 @@ end = struct
       let src = Stream.source st in
       let curpos = Stream.position st in
       let prev-is-word =
-        if curpos == 0 then true
+        if curpos == 0 then false
         else
           let c = string-sub src (curpos - 1) 1 in
           is-word-char c

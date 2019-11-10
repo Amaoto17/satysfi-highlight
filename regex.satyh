@@ -9,9 +9,9 @@ open Parser
 
 let control-char =
   choice [
-    char `n` >> return (string-unexplode [12])
-  ; char `t` >> return (string-unexplode [11])
-  ; char `r` >> return (string-unexplode [15])
+    char `n` >> return newline-char
+  ; char `t` >> return tab-char
+  ; char `r` >> return return-char
   ]
 
 let shorthand =
@@ -63,7 +63,7 @@ end = struct
 
   let item = none-of class-meta-char
 
-  let-rec escaped = fun st -> st |> run (
+  let-rec escaped = fun st -> st |> (
     char `\` >>
     choice [
       control-char >>= (fun c -> (
@@ -84,7 +84,7 @@ end = struct
       return (Range (c1, c2))
     ))
 
-  and primary = fun st -> st |> run (
+  and primary = fun st -> st |> (
     choice [
       char `[` >>
       class >>= (fun t -> (
@@ -97,14 +97,14 @@ end = struct
     ]
   )
 
-  and enum = fun st -> st |> run (
+  and enum = fun st -> st |> (
     let enum-op =
       return (fun t1 t2 -> Union (t1, t2))
     in
     chainl primary enum-op
   )
 
-  and prod = fun st -> st |> run (
+  and prod = fun st -> st |> (
     let prod-op =
       string `&&` >>
       return (fun t1 t2 -> Prod (t1, t2))
@@ -112,7 +112,7 @@ end = struct
     chainl enum prod-op
   )
 
-  and compl = fun st -> st |> run (
+  and compl = fun st -> st |> (
     opt-with (fun t -> t) (
       char `^` >> return (fun t -> Not t)
     ) >>= (fun f -> (
@@ -122,11 +122,11 @@ end = struct
     ))
   )
 
-  and class = fun st -> st |> run (
+  and class = fun st -> st |> (
     compl << char `]`
   )
 
-  and parse = fun st -> st |> run (
+  and parse = fun st -> st |> (
     char `[` >>
     class >>= build
   )
@@ -182,7 +182,7 @@ end = struct
     ; char `$` >> return (Anchor (EndOfLine))
     ]
 
-  let-rec paren = fun st -> st |> run (
+  let-rec paren = fun st -> st |> (
     char `(` >>
     choice [
       char `?` >>
@@ -207,7 +207,7 @@ end = struct
     ] << char `)`
   )
 
-  and primary = fun st -> st |> run (
+  and primary = fun st -> st |> (
     choice [
       paren
     ; char-class
@@ -247,7 +247,7 @@ end = struct
     ; return (builder Greedy)
     ]
 
-  and rep = fun st -> st |> run (
+  and rep = fun st -> st |> (
     primary >>= (fun t ->(
       choice [
         char `?` >> quantifier (fun q -> Opt (q, t))
@@ -261,20 +261,20 @@ end = struct
     ))
   )
 
-  and seq = fun st -> st |> run (
+  and seq = fun st -> st |> (
     many rep >>= (fun ts -> (
       return (Concat ts)
     ))
   )
 
-  and alt = fun st -> st |> run (
+  and alt = fun st -> st |> (
     let alt-op =
       char `|` >> return (fun t1 t2 -> Alt (t1, t2))
     in
     chainl seq alt-op
   )
 
-  and re = fun st -> st |> run (
+  and re = fun st -> st |> (
     alt << eof
   )
 
@@ -393,15 +393,15 @@ end = struct
       | Some inst -> return inst
     ))
 
-  let-rec next = fun st -> st |> run (
+  let-rec next = fun st -> st |> (
     increment-pc >> exec
   )
 
-  and jump pc = fun st -> st |> run (
+  and jump pc = fun st -> st |> (
     set-pc pc >> exec
   )
 
-  and exec = fun st -> st |> run (
+  and exec = fun st -> st |> (
     fetch >>= (fun inst -> (
       match inst with
       | OpEmpty ->

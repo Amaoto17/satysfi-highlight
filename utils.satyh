@@ -44,3 +44,13 @@ let is-letter c = is-upper c || is-lower c
 let is-alpha-num c = is-letter c || is-digit c
 let is-word-char c = is-alpha-num c || string-same c `_`
 let is-space c = string-contains #` `# c
+
+let newline-char = string-unexplode [10]
+let return-char  = string-unexplode [13]
+let tab-char     = string-unexplode [9]
+
+let is-space c =
+      string-same c #` `#
+  ||  string-same c newline-char
+  ||  string-same c return-char
+  ||  string-same c tab-char

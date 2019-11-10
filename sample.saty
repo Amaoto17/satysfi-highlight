@@ -52,6 +52,23 @@ and odd = function
 
 let (>>) p p' =
   p >>= fun _ -> p'
+
+module type S = sig
+  type t
+  val return : 'a -> t
+    constraint 'a :: int
+end
+
+module Option : sig
+  type 'a t = None | Some of 'a
+  val return : 'a -> 'a t
+end = struct
+  type 'a t =
+    | None
+    | Some of 'a
+
+  let return x = Some x
+end
 ```
     );
   >
