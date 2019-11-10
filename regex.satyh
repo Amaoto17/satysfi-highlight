@@ -175,12 +175,45 @@ end = struct
       ))
     ]
 
-  let single-meta =
+  let single-anchor =
     choice [
-      char `.` >> return Any
-    ; char `^` >> return (Anchor (BeginningOfLine))
+      char `^` >> return (Anchor (BeginningOfLine))
     ; char `$` >> return (Anchor (EndOfLine))
     ]
+
+  let check-fixed-length t =
+    let-rec walk t =
+      match t with
+      | Char _ -> Some 1
+      | Any -> Some 1
+      | Concat ts ->
+          ts |> List.fold-left (fun acc-opt t -> (
+            match (acc-opt, walk t) with
+            | (Some len1, Some len2) -> Some (len1 + len2)
+            | _ -> None
+          )) (Some 0)
+      | Alt (t1, t2) -> (
+          match (walk t1, walk t2) with
+          | (Some len1, Some len2) ->
+              if len1 == len2 then Some len1 else None
+          | _ -> None
+        )
+      | Group t -> walk t
+      | Satisfy _ -> Some 1
+      | LookAhead _ -> Some 0
+      | NegLookAhead _ -> Some 0
+      | Anchor _ -> Some 0
+      | Repeat (kind, _, t) -> (
+          match (kind, walk t) with
+          | (Just n, Some len) -> Some (len * n)
+          | _ -> None
+        )
+      | Atomic t -> walk t
+      | _ -> None
+    in
+    match walk t with
+    | None -> problem `look behind is allowed only for fixed-length pattern`
+    | Some len -> return len
 
   let-rec paren = fun st -> st |> (
     char `(` >>
@@ -195,6 +228,21 @@ end = struct
           alt >>= (fun t -> (
             return (NegLookAhead t)
           ))
+        ; char `<` >>
+          choice [
+            char `=` >>
+            alt >>= (fun t -> (
+              check-fixed-length t >>= (fun len -> (
+                return (LookBehind (len, t))
+              ))
+            ))
+          ; char `!` >>
+            alt >>= (fun t -> (
+              check-fixed-length t >>= (fun len -> (
+                return (NegLookBehind (len, t))
+              ))
+            ))
+          ]
         ; char `>` >>
           alt >>= (fun t -> (
             return (Atomic t)
@@ -212,7 +260,8 @@ end = struct
       paren
     ; char-class
     ; backslash
-    ; single-meta
+    ; char `.` >> return Any
+    ; single-anchor
     ; item >>= (fun c ->
         return (Char c)
       )
@@ -316,15 +365,12 @@ end = struct
   let get-nth-match n =
     get-state >>= (fun ctx -> (
       let len = List.length ctx#matched in
-      % let submatch = Option.from None (List.nth (len - 1 - n) ctx#matched) in
       let submatch = Option.from None (List.nth n ctx#matched) in
       return submatch
     ))
 
   let get-all-match =
     get-state >>= (fun ctx -> (
-      % let matched = List.map (Option.from (0, 0, ` `)) ctx#matched in
-      % return (List.reverse matched)
       return ctx#matched
     ))
 
@@ -340,14 +386,12 @@ end = struct
 
   let set-match n bpos epos s =
     get-state >>= (fun ctx -> (
-      % let len = List.length ctx#matched in
-      % let matched = list-nth-set (len - 1 - n) (Some (bpos, epos, s)) ctx#matched in
       let matched = list-nth-set n (Some (bpos, epos, s)) ctx#matched in
       put-state (| ctx with matched = matched |)
     ))
 
   let push-current-pos =
-    current-pos >>= (fun pos -> (
+    position >>= (fun pos -> (
       get-state >>= (fun ctx -> (
         let pos-stack = pos :: ctx#pos-stack in
         put-state (| ctx with pos-stack = pos-stack |)
@@ -436,11 +480,17 @@ end = struct
           ensure 1 >>
           match1p pred >>
           next
-      | OpAttempt (pc1, pc2) ->
+      | OpLookAhead (pc1, pc2) ->
           look-ahead (jump pc1) >>
           jump pc2
-      | OpAttemptFail (pc1, pc2) ->
+      | OpNegLookAhead (pc1, pc2) ->
           not-followed-by (jump pc1) >>
+          jump pc2
+      | OpLookBehind (len, pc1, pc2) ->
+          look-behind len (jump pc1) >>
+          jump pc2
+      | OpNegLookBehind (len, pc1, pc2) ->
+          not-followed-by (look-behind len (jump pc1)) >>
           jump pc2
       | OpAnchor kind ->
           anchor kind >>
@@ -532,17 +582,29 @@ end = struct
       | Satisfy pred ->
           emit (OpSatisfy pred)
       | LookAhead t ->
-          let set-attempt = reserve () in
+          let set-look-ahead = reserve () in
           let t-begin = curpos () in
           let () = iter t in
           let () = emit OpStop in
-          set-attempt (OpAttempt (t-begin, curpos ()))
+          set-look-ahead (OpLookAhead (t-begin, curpos ()))
       | NegLookAhead t ->
-          let set-attempt-fail = reserve () in
+          let set-neg-look-ahead = reserve () in
           let t-begin = curpos () in
           let () = iter t in
           let () = emit OpStop in
-          set-attempt-fail (OpAttemptFail (t-begin, curpos ()))
+          set-neg-look-ahead (OpNegLookAhead (t-begin, curpos ()))
+      | LookBehind (len, t) ->
+          let set-look-behind = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-look-behind (OpLookBehind (len, t-begin, curpos ()))
+      | NegLookBehind (len, t) ->
+          let set-neg-look-behind = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-neg-look-behind (OpNegLookBehind (len, t-begin, curpos ()))
       | Anchor kind ->
           emit (OpAnchor kind)
       | BackRef n ->
@@ -603,9 +665,12 @@ end = struct
         let () = display-message #` ---- ---- ---- ----`# in
         let () = display pat in
         let () = display (string-make pos #` `# ^ `^`) in
-        let () = if string-same unexp ` ` then () else display unexp in
-        let () = if string-same exp   ` ` then () else display exp in
-        let () = if string-same prob  ` ` then () else display prob in
+        let () =
+          if not (string-same prob ` `) then display prob
+          else
+            let () = if string-same unexp ` ` then () else display unexp in
+            if string-same exp ` ` then () else display exp
+        in
         abort-with-message (#`Parse error in character `# ^ arabic pos)
 
 end

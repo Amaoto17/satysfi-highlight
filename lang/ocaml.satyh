@@ -160,7 +160,7 @@ end = struct
           pattern `(?=\b(type|val|external|class|module|end)\b|^\s*$)`
       ; style = None
       ; inner = [
-          rule-typedef
+          % rule-typedef
         ]
       |)
     ]

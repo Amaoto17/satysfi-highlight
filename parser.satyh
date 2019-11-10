@@ -14,6 +14,7 @@ module Stream : sig
 
   val create : regex-vm option -> string -> t
   val position : t -> int
+  val set-position : t -> int -> t
   val uncons : t -> int -> (string * t) option
   val source : t -> string
   val get-custom : t -> regex-vm option
@@ -34,16 +35,18 @@ end = struct
     custom = custom;
   |)
 
-  let position st = st#offset
+  let position t = t#offset
 
-  let source st = st#source
+  let set-position t pos = (| t with offset = pos |)
 
-  let uncons st len =
-    if st#offset + len > string-length st#source then None
+  let source t = t#source
+
+  let uncons t len =
+    if t#offset + len > string-length t#source then None
     else
-      let s = string-sub st#source st#offset len in
-      let offset = st#offset + len in
-      Some (s, (| st with offset = offset |))
+      let s = string-sub t#source t#offset len in
+      let offset = t#offset + len in
+      Some (s, (| t with offset = offset |))
 
   let get-custom t = t#custom
 
@@ -171,7 +174,8 @@ module Parser : sig
   val put : Stream.t -> unit parser
   val get-state : regex-vm parser
   val put-state : regex-vm -> unit parser
-  val current-pos : int parser
+  val position : int parser
+  val set-position : int -> unit parser
   val unexpected : string -> 'a parser
   val problem : string -> 'a parser
   val (<?>) : 'a parser -> string -> 'a parser
@@ -181,6 +185,7 @@ module Parser : sig
   val string : string -> string parser
   val look-ahead : 'a parser -> 'a parser
   val not-followed-by : 'a parser -> unit parser
+  val look-behind : int -> 'a parser -> 'a parser
   val any : string parser
   val eof : unit parser
   val bof : unit parser
@@ -256,8 +261,11 @@ end = struct
   let put-state custom =
     get >>= (fun st -> (put (Stream.set-custom st (Some custom))))
 
-  let current-pos =
+  let position =
     get >>= (fun st -> return (Stream.position st))
+
+  let set-position pos =
+    get >>= (fun st -> (put (Stream.set-position st pos)))
 
   let empty st = EmptyErr (Error.empty (Stream.position st))
 
@@ -323,12 +331,23 @@ end = struct
       ) <|> return ()
     )
 
+  let look-behind len p =
+    get >>= (fun st -> (
+      let pos = Stream.position st in
+      if pos < len then unexpected `beginning of input`
+      else
+        set-position (pos - len) >>
+        p >>= (fun x -> (
+          put st >> return x
+        ))
+    ))
+
   let any = satisfy (fun _ -> true)
 
   let eof = not-followed-by any <?> `end of input`
 
   let bof =
-    current-pos >>= (fun pos -> (
+    position >>= (fun pos -> (
       if pos == 0 then return ()
       else expected `beginning of input`
     ))

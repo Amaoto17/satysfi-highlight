@@ -57,7 +57,7 @@ end = struct
     in
     let-rec iter acc lpos = fun st -> st |> run (
       let entire-match =
-        current-pos >>= (fun rpos -> (
+        position >>= (fun rpos -> (
           if lpos == rpos then return []
           else
             let s = string-sub (Stream.source st) lpos (rpos - lpos) in
@@ -72,7 +72,7 @@ end = struct
       in
       let continue acc stack =
         entire-match >>= (fun entire -> (
-          let p = current-pos >>= (iter []) in
+          let p = position >>= (iter []) in
           let submatches = List.concat (entire :: (List.reverse acc)) in
           return (submatches, Continue (p :: stack))
         ))
@@ -92,7 +92,7 @@ end = struct
       ; any >> iter acc lpos
       ]
     ) in
-    current-pos >>= (fun lpos -> (
+    position >>= (fun lpos -> (
       b#enter >>= (fun (submatches-enter, _) -> (
         iter [submatches-enter] lpos
       ))

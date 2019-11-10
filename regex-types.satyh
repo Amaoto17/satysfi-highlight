@@ -31,6 +31,8 @@ type node =
   | Satisfy of string -> bool
   | LookAhead of node
   | NegLookAhead of node
+  | LookBehind of int * node
+  | NegLookBehind of int * node
   | Anchor of anchor
   | BackRef of int
   | Repeat of repeat * quantity * node
@@ -49,8 +51,10 @@ type inst =
   | OpSaveStart
   | OpSaveEnd of int
   | OpSatisfy of string -> bool
-  | OpAttempt of int * int
-  | OpAttemptFail of int * int
+  | OpLookAhead of int * int
+  | OpNegLookAhead of int * int
+  | OpLookBehind of int * int * int
+  | OpNegLookBehind of int * int * int
   | OpAnchor of anchor
   | OpBackRef of int
 
