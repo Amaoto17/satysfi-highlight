@@ -59,7 +59,7 @@ end = struct
     return (iter ast)
 
 
-  let class-meta-char = `[]&-\`
+  let class-meta-char = `[]&\`
 
   let item = none-of class-meta-char
 
@@ -80,9 +80,12 @@ end = struct
 
   and range c1 =
     char `-` >>
-    item >>= (fun c2 -> (
-      return (Range (c1, c2))
-    ))
+    choice [
+      item >>= (fun c2 -> (
+        return (Range (c1, c2))
+      ))
+    ; return (Single `-`)
+    ]
 
   and primary = fun st -> st |> (
     choice [
@@ -346,18 +349,14 @@ end = struct
       put-state (| ctx with pc = pc |)
     ))
 
-  let ensure len =
-    get >>= (fun st -> (
-      let srclen = string-length (Stream.source st) in
-      if Stream.position st + len <= srclen then return ()
-      else unexpected `end of input`
-    ))
-
   let match1 c =
     char c >> return ()
 
   let any1 =
     any >> return ()
+
+  let matchn s =
+    string s >> return ()
 
   let match1p pred =
     satisfy pred >> return ()
@@ -451,12 +450,13 @@ end = struct
       | OpEmpty ->
           next
       | OpChar c ->
-          ensure 1 >>
           match1 c >>
           next
       | OpAny ->
-          ensure 1 >>
           any1 >>
+          next
+      | OpString s ->
+          matchn s >>
           next
       | OpMatch ->
           capture 0 >>
@@ -477,7 +477,6 @@ end = struct
           capture n >>
           next
       | OpSatisfy pred ->
-          ensure 1 >>
           match1p pred >>
           next
       | OpLookAhead (pc1, pc2) ->
@@ -516,9 +515,16 @@ end
 
 module Regex : sig
 
-  val compile : string -> (match-data list) parser
+  type regex
+  val compile : string -> regex
+  val run : regex -> (match-data list) parser
 
 end = struct
+
+  type regex = (|
+    inst-seq : inst Vec.t;
+    n-save : int;
+  |)
 
   let build ast =
     let-mutable inst-seq <- Vec.empty in
@@ -536,6 +542,8 @@ end = struct
           emit (OpChar c)
       | Any ->
           emit OpAny
+      | String s ->
+          emit (OpString s)
       | Concat node-list ->
           List.iter iter node-list
       | Alt (t1, t2) ->
@@ -646,7 +654,8 @@ end = struct
     in
     let () = iter ast in
     let () = emit OpMatch in
-    Exec.run !inst-seq !n-save
+    (| inst-seq = !inst-seq; n-save = !n-save |)
+
 
   let string-make len c =
     let-rec iter acc k =
@@ -657,7 +666,7 @@ end = struct
 
   let compile pat =
     match parse Syntax.re None pat with
-    | Ok ast -> build ast
+    | Ok ast -> ast |> build
     | Error err ->
         let display s = display-message (#`  `# ^ s) in
         let (unexp, exp, prob) = Error.format err in
@@ -672,5 +681,7 @@ end = struct
             if string-same exp ` ` then () else display exp
         in
         abort-with-message (#`Parse error in character `# ^ arabic pos)
+
+  let run re = Exec.run re#inst-seq re#n-save
 
 end

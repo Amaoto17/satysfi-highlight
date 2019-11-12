@@ -1,4 +1,3 @@
-@import: ../style
 @import: ../syntax
 
 open Syntax
@@ -10,189 +9,60 @@ module OCaml : sig
 
 end = struct
 
-  let rule-comment =
-    pattern-block (|
-      enter = pattern `\(\*`
-    ; leave = pattern `\*\)`
-    ; style = Some (Comment)
-    ; inner = []
-    |)
-
-  let rule-escape-string =
-    patterns [
-      pattern `\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ])`
-        |> capture 0 (style EscapeChar)
-    ; pattern `\\u\{\h+\}`
-        |> capture 0 (style EscapeChar)
-    ]
-
-  let rule-string =
-    patterns [
+  let rule-array =
+    let enter = pattern `\[\|` in
+    let leave = pattern `\|\]` in
+    fun self ->
       pattern-block (|
-        enter = pattern `(?=[^\\])"`
-      ; leave = pattern `"`
-      ; style = Some (String)
-      ; inner = [rule-escape-string]
+        enter = enter
+      ; leave = leave
+      ; style = Some (Array)
+      ; inner = [self]
       |)
-    ; pattern-block (|
-        enter = pattern `\{[a-z_]*\|`
-      ; leave = pattern `\|[a-z_]*\}`
-      ; style = Some (String)
-      ; inner = []
-      |)
-    ]
 
-  let rule-integer =
-    patterns [
-      pattern `-?0[xX]\h[\h_]*[lLn]?`
-        |> capture 0 (style NumericConstant)
-    ; pattern `-?0[oO][0-7][0-7_]*[lLn]?`
-        |> capture 0 (style NumericConstant)
-    ; pattern `-?0[bB][01][01_]*[lLn]?`
-        |> capture 0 (style NumericConstant)
-    ; pattern `-?\d[\d_]*[lLn]?`
-        |> capture 0 (style NumericConstant)
-    ]
+  let rule-comment =
+    let enter = pattern `\(\*` in
+    let leave = pattern `\*\)` in
+    fix (fun self -> (
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = Some (Comment)
+      ; inner = [self]
+      |)
+    ))
 
   let rule-float =
-    patterns [
-      pattern `-?0[xX]\h[\h_]*(\.[\h_]*)?([pP][\-+]?\d[\d_]*)?`
-        |> capture 0 (style NumericConstant)
-    ; pattern `-?\d[\d_]*(\.[\d_]*)?([eE][\-+]?\d[\d_]*)?`
-        |> capture 0 (style NumericConstant)
-    ]
+    pattern `-?\d[\d_]*\.([\d_]*)?([eE][+-]?\d[\d_]*)?`
+      |> capture 0 (style NumericConstant)
 
-  let rule-character =
-    pattern `'(.|\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\ ]))'`
-      |> capture 0 (style CharacterConstant)
+  let rule-integer =
+    pattern `-?\d[\d_]*`
+      |> capture 0 (style NumericConstant)
 
-  let rule-constants =
+  let rule-constant =
     patterns [
       pattern `\b(true|false)\b`
-        |> capture 0 (style LanguageConstant)
+        |> capture 0 (style BooleanConstant)
     ; rule-float
     ; rule-integer
-    ; rule-character
+    ; pattern `'(.|\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\]))'`
+        |> capture 0 (style CharacterConstant)
     ]
 
-  let rule-directives =
-    pattern `#\d+(?:"(.*?)")?`
-      |> capture 0 (style Keyword)
-      |> capture 1 (include rule-escape-string)
-
-  let rule-operator =
+  let rule-typename =
     patterns [
-      pattern `\b(mod|land|lor|lxor|lsl|lsr|asr)\b`
-        |> capture 0 (style Keyword)
-    ; pattern `[=<>@^|\&+\-*/$%][!$%\&*+\-./:<=>?@^|~]*|#[!$%\&*+\-./:<=>?@^|~]+`
-        |> capture 0 (style Operator)
-    ; pattern `![!$%\&*+\-./:<=>?@^|~]*|[?~][!$%\&*+\-./:<=>?@^|~]+`
-        |> capture 0 (style Operator)
+      pattern `\b(int|char|float|string|list|array|bool|unit|exn|option|result|int32|int64|nativeint)\b`
+        |> capture 0 (style TypeName)
     ]
 
-  let rule-module-binding =
-    pattern `\b(let)\s+(module)\s+([A-Z][\w']*)\s*(=)`
-      |> capture 1 (style Keyword)
-      |> capture 2 (style Keyword)
-      |> capture 3 (style ModuleName)
-      |> capture 4 (style Punctuation)
-
-  let rule-module-open-binding =
-    pattern `\b(let)\s+(open)\s+([A-Z][\w']*(\.[A-Z][\w']*)*)`
-      |> capture 1 (style Keyword)
-      |> capture 2 (style Keyword)
-      |> capture 3 (style ModuleName)
-
-  let rule-let-function =
-    pattern `\b(let|and)\s+(?!\(\*)((rec\s+)([a-z_][a-zA-Z0-9_']*)\b|([a-z_][a-zA-Z0-9_']*|\([^)]+\))(?=\s)((?=\s*=\s*(?=fun(?:ction)\b))|(?!\s*=)))`
-      |> capture 1 (style Keyword)
-      |> capture 3 (style Keyword)
-      |> capture 4 (style FunctionName)
-
-  let rule-function =
-    pattern-block (|
-      enter =
-        pattern `\b(fun)\s`
-          |> capture 1 (style Keyword)
-    ; leave =
-        pattern `->`
-    ; style = None
-    ; inner = []
-    |)
-
-  let rule-match-patterns =
+  let rule = fix (fun self -> (
     patterns [
-      pattern `\b_\b`
-    ; pattern `\|(?=\s*\S)`
+      rule-constant
+    ; rule-typename
+    ; rule-comment
+    ; rule-array self
     ]
-
-  let rule-pattern-match =
-    pattern-block (|
-      enter =
-        pattern `\b(with|function)\b`
-    ; leave =
-        pattern `->|\b(when)\b|\s\|`
-          |> capture 1 (style Keyword)
-    ; style = None
-    ; inner = [
-        rule-comment
-      ; rule-match-patterns
-      ]
-    |)
-
-  let rule-module =
-    pattern `^[ \t]*(module)\s+([A-Z_][\w']*)`
-      |> capture 1 (style Keyword)
-      |> capture 2 (style ModuleName)
-
-  let rule-module-type =
-    pattern `^[ \t]*(module\s+type\s+)([A-Z][\w']*)`
-      |> capture 1 (style Keyword)
-      |> capture 2 (style ModuleName)
-
-  let rule-module-sig-inner =
-    patterns [
-      pattern-block (|
-        enter = 
-          pattern `(val)\s+([a-z_][\w']*)\s*(:)`
-            |> capture 1 (style Keyword)
-      ; leave =
-          pattern `(?=\b(type|val|external|class|module|end)\b|^\s*$)`
-      ; style = None
-      ; inner = [
-          % rule-typedef
-        ]
-      |)
-    ]
-
-  let rule-module-signature =
-    pattern-block (|
-      enter =
-        pattern `\b(sig)\b`
-          |> capture 1 (style Keyword)
-    ; leave =
-        pattern `\b(end)\b`
-          |> capture 1 (style Keyword)
-    ; style = None
-    ; inner = [
-        rule-module-sig-inner
-      ]
-    |)
-
-  let rule =
-    patterns [
-      rule-comment
-    ; rule-string
-    ; rule-constants
-    ; rule-directives
-    ; rule-operator
-    ; rule-module-binding
-    ; rule-module-open-binding
-    ; rule-let-function
-    ; rule-function
-    ; rule-pattern-match
-    ; rule-module
-    ; rule-module-type
-    ]
+  ))
 
 end

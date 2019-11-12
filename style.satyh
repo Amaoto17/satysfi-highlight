@@ -1,17 +1,22 @@
 type style =
-  | Keyword
-  | NumericConstant
-  | EscapeChar
-  | String
+  | Array
   | Comment
-  | FunctionName
-  | LanguageConstant
-  | Constant
-  | TypeName
-  | Operator
-  | ModuleName
-  | Punctuation
-  | Variable
-  | Storage
-  | Meta
+  | BooleanConstant
   | CharacterConstant
+  | NumericConstant
+  | TypeName
+  % | Keyword
+  % | NumericConstant
+  % | BooleanConstant
+  % | CharacterConstant
+  % | String
+  % | FunctionName
+  % | Constant
+  % | TypeName
+  % | Operator
+  % | ModuleName
+  % | Punctuation
+  % | Variable
+  % | Storage
+  % | Meta
+  % | CharacterConstant

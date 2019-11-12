@@ -133,7 +133,9 @@ end = struct
             | msg :: _ -> #`unexpected `# ^ msg
           in
           let msg-exp =
-            #`expected `# ^ (string-concat #` or `# exp)
+            let expect = (string-concat #` or `# exp) in
+            if string-same expect ` ` then ` `
+            else #`expected `# ^ expect
           in
           let msg-prob =
             match prob with
@@ -183,6 +185,7 @@ module Parser : sig
   val attempt : 'a parser -> 'a parser
   val satisfy : (string -> bool) -> string parser
   val string : string -> string parser
+  val fix : ('a parser -> 'a parser) -> 'a parser
   val look-ahead : 'a parser -> 'a parser
   val not-followed-by : 'a parser -> unit parser
   val look-behind : int -> 'a parser -> 'a parser
@@ -317,6 +320,17 @@ end = struct
         if string-same s1 s then ConsumedOk (s1, st1, Error.empty (Stream.position st))
         else EmptyErr (Error.expected (`"` ^ s ^ `"`) (Stream.position st))
 
+  let fix f =
+    let-rec p = fun st -> (f r)
+    and r = fun st -> (p st) st in r
+
+  let many p = fix (fun self -> (
+    (p >>= (fun x -> (self >>= (fun xs -> return (x :: xs))))) <|> return []
+  ))
+
+  let many1 p =
+    p >>= (fun x -> (many p >>= (fun xs -> return (x :: xs))))
+
   let look-ahead p =
     get >>= (fun st -> (
       p >>= (fun x -> (
@@ -376,9 +390,9 @@ end = struct
   let non-word-boundary =
     not-followed-by word-boundary <?> `non-word boundary`
 
-  let-rec many p = many1 p <|> return []
+  % let-rec many p = many1 p <|> return []
 
-  and many1 p = p >>= (fun x -> (many p >>= (fun xs -> return (x :: xs))))
+  % and many1 p = p >>= (fun x -> (many p >>= (fun xs -> return (x :: xs))))
 
   let choice ps = List.fold-left (<|>) empty ps
 

@@ -22,6 +22,7 @@ type repeat =
 type node =
   | Char of string
   | Any
+  | String of string
   | Concat of node list
   | Alt of node * node
   | Opt of quantity * node
@@ -42,6 +43,7 @@ type node =
 type inst =
   | OpEmpty
   | OpChar of string
+  | OpString of string
   | OpMatch
   | OpAny
   | OpSplit of int * int

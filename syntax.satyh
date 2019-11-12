@@ -5,22 +5,12 @@
 open Parser
 
 
-type color-ctx =
-  | Empty
-  | Simple of color
-  | Nested of submatch list
-
-and submatch = match-data * color-ctx
-
-type continuation =
-  | Done
-  | Continue of rule list
-
-and rule = (submatch list * continuation) parser
-
-
 module Syntax : sig
 
+  type submatch
+  type rule
+
+  val fix : (rule -> rule) -> rule
   val pattern : string -> rule
   val patterns : rule list -> rule
   val pattern-block : 'a -> rule
@@ -36,10 +26,26 @@ module Syntax : sig
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
 end = struct
-  
+
+  type color-ctx =
+    | Empty
+    | Simple of color
+    | Nested of submatch list
+
+  and submatch = match-data * color-ctx
+
+  type continuation =
+    | Done
+    | Continue of rule list
+
+  and rule = (submatch list * continuation) parser
+
+
+  let fix = Parser.fix
+
   let pattern pat =
     let re = Regex.compile pat in
-    attempt re >>= (fun matched -> (
+    attempt (Regex.run re) >>= (fun matched -> (
       let submatches = matched |> List.map (fun data -> (data, Empty)) in
       return (submatches, Done)
     ))
@@ -209,6 +215,7 @@ end = struct
     let () = List.iter print submatches in submatches
 
   let highlight ctx stack-init rule code =
+    let skip = pattern `\s+|\w+\s*|.\s*` in
     let p-line =
       let-rec iter acc stack = fun st -> st |> run (
         choice [
@@ -229,7 +236,7 @@ end = struct
                 ))
               )
           )
-        ; any >> iter acc stack
+        ; skip >> iter acc stack
         ]
       ) in iter [] stack-init
     in
