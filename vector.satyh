@@ -2,87 +2,90 @@ module Vec : sig
 
   type 'a t
 
-  val empty : 'a t
+  val create : unit -> 'a t
   val size : 'a t -> int
   val get : 'a t -> int -> 'a option
-  val push : 'a t -> 'a -> 'a t
-  val set : 'a t -> int -> 'a -> 'a t
-  val map : ('a -> 'b) -> 'a t -> 'b t
+  val push : 'a t -> 'a -> unit
+  val set : 'a t -> int -> 'a -> unit
 
 end = struct
 
   type 'a heap =
     | Empty
-    | Node of 'a * 'a heap * 'a heap
+    | Node of (|
+        data  : 'a ref;
+        left  : ('a heap) ref;
+        right : ('a heap) ref;
+      |)
 
   type 'a t = (|
-    heap : 'a heap;
-    size : int;
+    heap : ('a heap) ref;
+    size : int ref;
   |)
 
-  type visit-dir = Left | Right
+  type dir = L | R
 
-  let empty = (| heap = Empty; size = 0 |)
+  let ref e = let-mutable x <- e in x
 
-  let size t = t#size
+  let create () = (|
+    heap = ref Empty;
+    size = ref 0;
+  |)
 
-  let build-path n =
+  let size t = !t#size
+
+  let singleton data = Node (|
+    data  = ref data;
+    left  = ref Empty;
+    right = ref Empty;
+  |)
+
+  let path n =
     let-rec iter acc k =
       if k < 2 then acc
-      else
-        let k1 = k mod 2 in
-        if k1 == 0 then iter (Left :: acc) (k / 2)
-        else iter (Right :: acc) (k / 2)
+      else if k mod 2 == 0 then iter (L :: acc) (k / 2)
+      else iter (R :: acc) (k / 2)
     in
     iter [] (n + 1)
 
   let get t n =
     let-rec iter heap path =
-      match (heap, path) with
-      | (Empty, _) -> None
-      | (Node (e, _, _), []) -> Some e
-      | (Node (_, left, right), dir :: rest) -> (
-          match dir with
-          | Left -> iter left rest
-          | Right -> iter right rest
+      match !heap with
+      | Empty -> None
+      | Node v -> (
+          match path with
+          | [] -> Some (!(v#data))
+          | (L) :: rest -> iter v#left  rest
+          | (R) :: rest -> iter v#right rest
         )
     in
-    iter t#heap (build-path n)
+    iter t#heap (path n)
 
-  let push t e =
+  let push t data =
     let-rec iter heap path =
-      match (heap, path) with
-      | (Empty, _) -> Node (e, Empty, Empty)
-      | (Node x, []) -> Node x
-      | (Node (e1, left, right), dir :: rest) -> (
-          match dir with
-          | Left -> Node (e1, (iter left rest), right)
-          | Right -> Node (e1, left, (iter right rest))
+      match !heap with
+      | Empty -> heap <- singleton data
+      | Node v -> (
+          match path with
+          | [] -> abort-with-message `Vec.push`
+          | (L) :: rest -> iter v#left  rest
+          | (R) :: rest -> iter v#right rest
         )
     in
-    let heap = iter t#heap (build-path (size t)) in
-    (| heap = heap; size = t#size + 1 |)
+    let () = iter t#heap (path (size t)) in
+    let s = t#size in s <- !s + 1
 
-  let set t n e =
+  let set t n data =
     let-rec iter heap path =
-      match (heap, path) with
-      | (Empty, _) -> Empty
-      | (Node (_, left, right), []) -> Node (e, left, right)
-      | (Node (e1, left, right), dir :: rest) -> (
-          match dir with
-          | Left -> Node (e1, (iter left rest), right)
-          | Right -> Node (e1, left, (iter right rest))
+      match !heap with
+      | Empty -> abort-with-message `index out of range`
+      | Node v -> (
+          match path with
+          | [] -> let d = v#data in d <- data
+          | (L) :: rest -> iter v#left  rest
+          | (R) :: rest -> iter v#right rest
         )
     in
-    let heap = iter t#heap (build-path n) in
-    (| t with heap = heap |)
-
-  let map f t =
-    let-rec iter heap =
-      match heap with
-      | Empty -> Empty
-      | Node (e, left, right) -> Node (f e, iter left, iter right)
-    in
-    (| heap = iter t#heap; size = t#size |)
+    iter t#heap (path n)
 
 end

@@ -71,7 +71,7 @@ type regex-vm = (|
 |)
 
 let regex-vm-init = (|
-  inst-seq = Vec.empty;
+  inst-seq = Vec.create ();
   pc = 0;
   pos-stack = [];
   matched = [];

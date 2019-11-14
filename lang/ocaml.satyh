@@ -9,28 +9,22 @@ module OCaml : sig
 
 end = struct
 
-  let rule-array =
-    let enter = pattern `\[\|` in
-    let leave = pattern `\|\]` in
-    fun self ->
-      pattern-block (|
-        enter = enter
-      ; leave = leave
-      ; style = Some (Array)
-      ; inner = [self]
-      |)
+  let rule-array = fun deg ->
+    pattern-block (|
+      enter = pattern `\[\|`
+    ; leave = pattern `\|\]`
+    ; style = Some (Array)
+    ; inner = [deg]
+    |)
 
-  let rule-comment =
-    let enter = pattern `\(\*` in
-    let leave = pattern `\*\)` in
-    fix (fun self -> (
-      pattern-block (|
-        enter = enter
-      ; leave = leave
-      ; style = Some (Comment)
-      ; inner = [self]
-      |)
-    ))
+  let rule-comment = fix (fun self -> (
+    pattern-block (|
+      enter = pattern `\(\*`
+    ; leave = pattern `\*\)`
+    ; style = Some (Comment)
+    ; inner = [self]
+    |)
+  ))
 
   let rule-float =
     pattern `-?\d[\d_]*\.([\d_]*)?([eE][+-]?\d[\d_]*)?`
@@ -50,6 +44,14 @@ end = struct
         |> capture 0 (style CharacterConstant)
     ]
 
+  let rule-list = fun deg ->
+    pattern-block (|
+      enter = pattern `\[(?!\|)`
+    ; leave = pattern `(?<!\|)\]`
+    ; style = Some (List)
+    ; inner = [deg]
+    |)
+
   let rule-typename =
     patterns [
       pattern `\b(int|char|float|string|list|array|bool|unit|exn|option|result|int32|int64|nativeint)\b`
@@ -62,6 +64,7 @@ end = struct
     ; rule-typename
     ; rule-comment
     ; rule-array self
+    ; rule-list self
     ]
   ))
 

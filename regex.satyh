@@ -527,13 +527,13 @@ end = struct
   |)
 
   let build ast =
-    let-mutable inst-seq <- Vec.empty in
-    let emit inst = inst-seq <- Vec.push !inst-seq inst in
-    let curpos () = Vec.size !inst-seq in
+    let inst-seq = Vec.create () in
+    let emit inst = Vec.push inst-seq inst in
+    let curpos () = Vec.size inst-seq in
     let reserve () =
       let i = curpos () in
       let () = emit OpEmpty in
-      fun inst -> (inst-seq <- Vec.set !inst-seq i inst)
+      fun inst -> Vec.set inst-seq i inst
     in
     let-mutable n-save <- 0 in
     let-rec iter node =
@@ -654,7 +654,7 @@ end = struct
     in
     let () = iter ast in
     let () = emit OpMatch in
-    (| inst-seq = !inst-seq; n-save = !n-save |)
+    (| inst-seq = inst-seq; n-save = !n-save |)
 
 
   let string-make len c =

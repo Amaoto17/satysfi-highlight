@@ -1,5 +1,6 @@
 type style =
   | Array
+  | List
   | Comment
   | BooleanConstant
   | CharacterConstant
