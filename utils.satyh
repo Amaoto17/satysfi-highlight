@@ -35,22 +35,17 @@ let-rec list-rev-append xs ys =
   | [] -> ys
   | x :: rest -> list-rev-append rest (x :: ys)
 
-let is-digit = string-contains `0123456789`
-let is-oct-digit = string-contains `01234567`
-let is-hex-digit = string-contains `0123456789abcdefABCDEF`
-let is-upper = string-contains `ABCDEFGHIJKLMNOPQRSTUVWXYZ`
-let is-lower = string-contains `abcdefghijklmnopqrstuvwxyz`
-let is-letter c = is-upper c || is-lower c
-let is-alpha-num c = is-letter c || is-digit c
-let is-word-char c = is-alpha-num c || string-same c `_`
-let is-space c = string-contains #` `# c
+
+let is-digit     = string-match (regexp-of-string `[0-9]`)
+let is-oct-digit = string-match (regexp-of-string `[0-7]`)
+let is-hex-digit = string-match (regexp-of-string `[0-9a-fA-F]`)
+let is-lower     = string-match (regexp-of-string `[a-z]`)
+let is-upper     = string-match (regexp-of-string `[A-Z]`)
+let is-letter    = string-match (regexp-of-string `[a-zA-Z]`)
+let is-alpha-num = string-match (regexp-of-string `[0-9a-zA-Z]`)
+let is-word-char = string-match (regexp-of-string `[0-9a-zA-Z_]`)
+let is-space     = string-match (regexp-of-string `[ \n\t\r]`)
 
 let newline-char = string-unexplode [10]
 let return-char  = string-unexplode [13]
 let tab-char     = string-unexplode [9]
-
-let is-space c =
-      string-same c #` `#
-  ||  string-same c newline-char
-  ||  string-same c return-char
-  ||  string-same c tab-char
