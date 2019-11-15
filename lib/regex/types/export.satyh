@@ -1,0 +1,24 @@
+@import: ../../vector
+@import: inst
+
+
+type match-data = (int * int * string) option % begin, end, matched string
+
+type regex-vm = (|
+  inst-seq  : inst Vec.t;
+  pc        : int;
+  pos-stack : int list;
+  matched   : match-data list;
+|)
+
+let regex-vm-init = (|
+  inst-seq  = Vec.create ();
+  pc        = 0;
+  pos-stack = [];
+  matched   = [];
+|)
+
+type regex = (|
+  inst-seq : inst Vec.t;
+  n-save   : int;
+|)

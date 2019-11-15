@@ -1,6 +1,6 @@
 @require: list
 @import: utils
-@import: regex-types
+@import: regex/types/export
 
 
 type 'a 'b result =

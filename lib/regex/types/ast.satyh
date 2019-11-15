@@ -1,0 +1,22 @@
+@import: common
+
+
+type node =
+  | Char of string
+  | Any
+  | Str of string
+  | Concat of node list
+  | Alt of node * node
+  | Opt of quantity * node
+  | Many of quantity * node
+  | Many1 of quantity * node
+  | Group of node
+  | Satisfy of string -> bool
+  | LookAhead of node
+  | NegLookAhead of node
+  | LookBehind of int * node
+  | NegLookBehind of int * node
+  | Anchor of anchor
+  | BackRef of int
+  | Repeat of repeat * quantity * node
+  | Atomic of node

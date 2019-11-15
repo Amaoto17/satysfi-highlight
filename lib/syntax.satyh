@@ -1,8 +1,7 @@
-@import: style
+@import: ../style
 @import: parser
+@import: regex/types/export
 @import: regex
-@require: deco
-@import: color-scheme
 
 open Parser
 

@@ -1,0 +1,22 @@
+@import: common
+
+
+type inst =
+  | OpEmpty
+  | OpChar of string
+  | OpString of string
+  | OpMatch
+  | OpAny
+  | OpSplit of int * int
+  | OpJump of int
+  | OpAtomicExec of int * int
+  | OpStop
+  | OpSaveStart
+  | OpSaveEnd of int
+  | OpSatisfy of string -> bool
+  | OpLookAhead of int * int
+  | OpNegLookAhead of int * int
+  | OpLookBehind of int * int * int
+  | OpNegLookBehind of int * int * int
+  | OpAnchor of anchor
+  | OpBackRef of int

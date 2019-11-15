@@ -1,0 +1,176 @@
+@import: types/common
+@import: types/ast
+@import: types/inst
+@import: types/export
+@import: syntax
+@import: ../vector
+@import: ../parser
+
+open Parser
+
+
+module Compiler : sig
+
+  val compile : string -> regex
+
+end = struct
+
+  let build ast =
+    let inst-seq = Vec.create () in
+    let emit inst = Vec.push inst-seq inst in
+    let curpos () = Vec.size inst-seq in
+    let reserve () =
+      let i = curpos () in
+      let () = emit OpEmpty in
+      fun inst -> Vec.set inst-seq i inst
+    in
+    let-mutable n-save <- 0 in
+    let-rec iter node =
+      match node with
+      | Char c ->
+          emit (OpChar c)
+      | Any ->
+          emit OpAny
+      | Str s ->
+          emit (OpString s)
+      | Concat node-list ->
+          List.iter iter node-list
+      | Alt (t1, t2) ->
+          let set-split = reserve () in
+          let t1-begin = curpos () in
+          let () = iter t1 in
+          let set-jump = reserve () in
+          let t2-begin = curpos () in
+          let () = iter t2 in
+          let () = set-split (OpSplit (t1-begin, t2-begin)) in
+          set-jump (OpJump (curpos ()))
+      | Opt (quantity, t) ->
+          let emitter () =
+            let set-split = reserve () in
+            let t-begin = curpos () in
+            let () = iter t in
+            (set-split, t-begin)
+          in
+          emit-quantify emitter quantity
+      | Many (quantity, t) ->
+          let emitter () =
+            let loop-begin = curpos () in
+            let set-split = reserve () in
+            let t-begin = curpos () in
+            let () = iter t in
+            let () = emit (OpJump loop-begin) in
+            (set-split, t-begin)
+          in
+          emit-quantify emitter quantity
+      | Many1 (quantity, t) ->
+          let emitter () =
+            let t-begin = curpos () in
+            let () = iter t in
+            let set-split = reserve () in
+            (set-split, t-begin)
+          in
+          emit-quantify emitter quantity
+      | Group t ->
+          let () = n-save <- !n-save + 1 in
+          let n = !n-save in
+          let () = emit OpSaveStart in
+          let () = iter t in
+          emit (OpSaveEnd n)
+      | Satisfy pred ->
+          emit (OpSatisfy pred)
+      | LookAhead t ->
+          let set-look-ahead = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-look-ahead (OpLookAhead (t-begin, curpos ()))
+      | NegLookAhead t ->
+          let set-neg-look-ahead = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-neg-look-ahead (OpNegLookAhead (t-begin, curpos ()))
+      | LookBehind (len, t) ->
+          let set-look-behind = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-look-behind (OpLookBehind (len, t-begin, curpos ()))
+      | NegLookBehind (len, t) ->
+          let set-neg-look-behind = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-neg-look-behind (OpNegLookBehind (len, t-begin, curpos ()))
+      | Anchor kind ->
+          emit (OpAnchor kind)
+      | BackRef n ->
+          emit (OpBackRef n)
+      | Repeat (kind, quantity, t) -> (
+          match kind with
+          | Just n ->
+              for n (fun _ -> iter t)
+          | AtLeast n ->
+              let () = for n (fun _ -> iter t) in
+              iter (Many (quantity, t))
+          | AtMost n ->
+              for n (fun _ -> iter (Opt (quantity, t)))
+          | Between (m, n) ->
+              let () = for m (fun _ -> iter t) in
+              for (n - m) (fun _ -> iter (Opt (quantity, t)))
+        )
+      | Atomic t ->
+          let set-atomic-exec = reserve () in
+          let t-begin = curpos () in
+          let () = iter t in
+          let () = emit OpStop in
+          set-atomic-exec (OpAtomicExec (t-begin, curpos ()))
+    and emit-quantify emitter quantity =
+      match quantity with
+      | Greedy ->
+          let (set-split, t-begin) = emitter () in
+          set-split (OpSplit (t-begin, curpos ()))
+      | Reluctant ->
+          let (set-split, t-begin) = emitter () in
+          set-split (OpSplit (curpos (), t-begin))
+      | Possessive ->
+          let set-atomic-exec = reserve () in
+          let loop-begin = curpos () in
+          let (set-split, t-begin) = emitter () in
+          let () = set-split (OpSplit (t-begin, curpos ())) in
+          let () = emit OpStop in
+          set-atomic-exec (OpAtomicExec (loop-begin, curpos ()))
+    in
+    let () = iter ast in
+    let () = emit OpMatch in
+    (| inst-seq = inst-seq; n-save = !n-save |)
+
+
+  let string-make len c =
+    let-rec iter acc k =
+      if k == len then acc
+      else iter (acc ^ c) (k + 1)
+    in
+    iter ` ` 0
+
+  let error pat err =
+    let display s = display-message (#`  `# ^ s) in
+    let (unexp, exp, prob) = Error.format err in
+    let pos = Error.position err in
+    let () = display-message #` ---- ---- ---- ----`# in
+    let () = display pat in
+    let () = display (string-make pos #` `# ^ `^`) in
+    let () =
+      if not (string-same prob ` `) then display prob
+      else
+        let () = if string-same unexp ` ` then () else display unexp in
+        if string-same exp ` ` then () else display exp
+    in
+    abort-with-message (#`Parse error in character `# ^ arabic pos)
+
+  let compile pat =
+    match parse Syntax.re None pat with
+    | Ok ast -> ast |> build
+    | Error err -> error pat err
+
+end

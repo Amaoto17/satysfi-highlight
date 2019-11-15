@@ -2,7 +2,7 @@
 @require: deco
 @require: pervasives
 @import: color-scheme
-@import: syntax
+@import: lib/syntax
 
 open Syntax
 

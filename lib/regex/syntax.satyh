@@ -1,0 +1,335 @@
+@import: types/common
+@import: types/ast
+@import: ../parser
+
+open Parser
+
+
+let control-char =
+  choice [
+    char `n` >> return newline-char
+  ; char `t` >> return tab-char
+  ; char `r` >> return return-char
+  ]
+
+let shorthand =
+  choice [
+    char `w` >> return is-word-char
+  ; char `W` >> return (negate is-word-char)
+  ; char `d` >> return is-digit
+  ; char `D` >> return (negate is-digit)
+  ; char `s` >> return is-space
+  ; char `S` >> return (negate is-space)
+  ; char `h` >> return is-hex-digit
+  ; char `H` >> return (negate is-hex-digit)
+  ]
+
+
+module CharClass : sig
+
+  val parse : (string -> bool) parser
+
+end = struct
+
+  type class-node =
+    | Class of class-node
+    | Single of string
+    | Range of string * string
+    | Shorthand of string -> bool
+    | Union of class-node * class-node
+    | Prod of class-node * class-node
+    | Not of class-node
+
+  
+  let build ast =
+    let-rec iter node =
+      match node with
+      | Single c -> string-same c
+      | Range (c1, c2) ->
+          let pat = regexp-of-string (`[` ^ c1 ^ `-` ^ c2 ^ `]`) in
+          string-match pat
+      | Class t -> iter t
+      | Shorthand pred -> pred
+      | Not t -> negate (iter t)
+      | Prod (t1, t2) -> fun x -> iter t1 x && iter t2 x
+      | Union (t1, t2) -> fun x -> iter t1 x || iter t2 x
+    in
+    return (iter ast)
+
+
+  let class-meta-char = `[]&\`
+
+  let item = none-of class-meta-char
+
+  let-rec escaped = fun st -> st |> (
+    char `\` >>
+    choice [
+      control-char >>= (fun c -> (
+        return (Single c)
+      ))
+    ; shorthand >>= (fun pred -> (
+        return (Shorthand pred)
+      ))
+    ; any >>= (fun c -> (
+        return (Single c)
+      ))
+    ]
+  )
+
+  and range c1 =
+    char `-` >>
+    choice [
+      item >>= (fun c2 -> (
+        return (Range (c1, c2))
+      ))
+    ; return (Single `-`)
+    ]
+
+  and primary = fun st -> st |> (
+    choice [
+      char `[` >>
+      class >>= (fun t -> (
+        return (Class t)
+      ))
+    ; escaped
+    ; item >>= (fun c -> (
+        (range c) <|> return (Single c)
+      ))
+    ]
+  )
+
+  and enum = fun st -> st |> (
+    let enum-op =
+      return (fun t1 t2 -> Union (t1, t2))
+    in
+    chainl primary enum-op
+  )
+
+  and prod = fun st -> st |> (
+    let prod-op =
+      string `&&` >>
+      return (fun t1 t2 -> Prod (t1, t2))
+    in
+    chainl enum prod-op
+  )
+
+  and compl = fun st -> st |> (
+    opt-with (fun t -> t) (
+      char `^` >> return (fun t -> Not t)
+    ) >>= (fun f -> (
+      prod >>= (fun t -> (
+        return (f t)
+      ))
+    ))
+  )
+
+  and class = fun st -> st |> (
+    compl << char `]`
+  )
+
+  and parse = fun st -> st |> (
+    char `[` >>
+    class >>= build
+  )
+
+end
+
+
+module Syntax : sig
+
+  val re : node parser
+
+end = struct
+
+  let re-meta-char = `|?*+()[]^$.\`
+
+  let item = none-of re-meta-char
+
+  let char-class =
+    CharClass.parse >>= (fun pred -> (
+      return (Satisfy pred)
+    ))
+
+  let backslash-anchor =
+    choice [
+      char `b` >> return WordBoundary
+    ; char `B` >> return NonWordBoundary
+    ]
+
+  let backslash =
+    char `\` >>
+    choice [
+      control-char >>= (fun c -> (
+        return (Char c)
+      ))
+    ; shorthand >>= (fun pred -> (
+        return (Satisfy pred)
+      ))
+    ; backslash-anchor >>= (fun kind -> (
+        return (Anchor kind)
+      ))
+    ; decimal >>= (fun n -> (
+        return (BackRef n)
+      ))
+    ; any >>= (fun c -> (
+        return (Char c)
+      ))
+    ]
+
+  let single-anchor =
+    choice [
+      char `^` >> return (Anchor (BeginningOfLine))
+    ; char `$` >> return (Anchor (EndOfLine))
+    ]
+
+  let check-fixed-length t =
+    let-rec walk t =
+      match t with
+      | Char _ -> Some 1
+      | Any -> Some 1
+      | Concat ts ->
+          ts |> List.fold-left (fun acc-opt t -> (
+            match (acc-opt, walk t) with
+            | (Some len1, Some len2) -> Some (len1 + len2)
+            | _ -> None
+          )) (Some 0)
+      | Alt (t1, t2) -> (
+          match (walk t1, walk t2) with
+          | (Some len1, Some len2) ->
+              if len1 == len2 then Some len1 else None
+          | _ -> None
+        )
+      | Group t -> walk t
+      | Satisfy _ -> Some 1
+      | LookAhead _ -> Some 0
+      | NegLookAhead _ -> Some 0
+      | Anchor _ -> Some 0
+      | Repeat (kind, _, t) -> (
+          match (kind, walk t) with
+          | (Just n, Some len) -> Some (len * n)
+          | _ -> None
+        )
+      | Atomic t -> walk t
+      | _ -> None
+    in
+    match walk t with
+    | None -> problem `look behind is allowed only for fixed-length pattern`
+    | Some len -> return len
+
+  let-rec paren = fun st -> st |> (
+    char `(` >>
+    choice [
+      char `?` >>
+        choice [
+          char `=` >>
+          alt >>= (fun t -> (
+            return (LookAhead t)
+          ))
+        ; char `!` >>
+          alt >>= (fun t -> (
+            return (NegLookAhead t)
+          ))
+        ; char `<` >>
+          choice [
+            char `=` >>
+            alt >>= (fun t -> (
+              check-fixed-length t >>= (fun len -> (
+                return (LookBehind (len, t))
+              ))
+            ))
+          ; char `!` >>
+            alt >>= (fun t -> (
+              check-fixed-length t >>= (fun len -> (
+                return (NegLookBehind (len, t))
+              ))
+            ))
+          ]
+        ; char `>` >>
+          alt >>= (fun t -> (
+            return (Atomic t)
+          ))
+        ; char `:` >> alt
+        ]
+    ; alt >>= (fun t -> (
+        return (Group t)
+      ))
+    ] << char `)`
+  )
+
+  and primary = fun st -> st |> (
+    choice [
+      paren
+    ; char-class
+    ; backslash
+    ; char `.` >> return Any
+    ; single-anchor
+    ; many1 item >>= (fun cs -> (
+        let s = List.fold-left (^) ` ` cs in
+        return (Str s)
+      ))
+    % ; item >>= (fun c ->
+    %     return (Char c)
+    %   )
+    ]
+  )
+
+  and rep-times t =
+    char `{` >>
+    choice [
+      char `,` >>
+      decimal >>= (fun n -> (
+        return (AtMost n)
+      ))
+    ; decimal >>= (fun m -> (
+        choice [
+          char `,` >>
+          choice [
+            decimal >>= (fun n -> (
+              return (Between (m, n))
+            ))
+          ; return (AtLeast m)
+          ]
+        ; return (Just m)
+        ]
+      ))
+    ] << char `}`
+
+  and quantifier builder =
+    choice [
+      char `?` >> return (builder Reluctant)
+    ; char `+` >> return (builder Possessive)
+    ; return (builder Greedy)
+    ]
+
+  and rep = fun st -> st |> (
+    primary >>= (fun t ->(
+      choice [
+        char `?` >> quantifier (fun q -> Opt (q, t))
+      ; char `*` >> quantifier (fun q -> Many (q, t))
+      ; char `+` >> quantifier (fun q -> Many1 (q, t))
+      ; rep-times t >>= (fun kind -> (
+          quantifier (fun q -> Repeat (kind, q, t))
+        ))
+      ; return t
+      ]
+    ))
+  )
+
+  and seq = fun st -> st |> (
+    many rep >>= (fun ts -> (
+      return (Concat ts)
+    ))
+  )
+
+  and alt = fun st -> st |> (
+    let alt-op =
+      char `|` >> return (fun t1 t2 -> Alt (t1, t2))
+    in
+    chainl seq alt-op
+  )
+
+  and re = fun st -> st |> (
+    alt << eof
+  )
+
+end

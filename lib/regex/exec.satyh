@@ -1,0 +1,186 @@
+@import: types/inst
+@import: types/export
+@import: ../vector
+@import: ../parser
+
+open Parser
+
+
+module Exec : sig
+
+  val run : inst Vec.t -> int -> (match-data list) parser
+
+end = struct
+
+  let increment-pc =
+    get-state >>= (fun ctx -> (
+      put-state (| ctx with pc = ctx#pc + 1 |)
+    ))
+
+  let set-pc pc =
+    get-state >>= (fun ctx -> (
+      put-state (| ctx with pc = pc |)
+    ))
+
+  let match1 c =
+    char c >> return ()
+
+  let any1 =
+    any >> return ()
+
+  let matchn s =
+    string s >> return ()
+
+  let match1p pred =
+    satisfy pred >> return ()
+
+  let get-nth-match n =
+    get-state >>= (fun ctx -> (
+      let len = List.length ctx#matched in
+      let submatch = Option.from None (List.nth n ctx#matched) in
+      return submatch
+    ))
+
+  let get-all-match =
+    get-state >>= (fun ctx -> (
+      return ctx#matched
+    ))
+
+  let list-nth-set n elem lst =
+    let-rec iter k lst =
+      match lst with
+      | [] -> []
+      | x :: xs ->
+          if k == n then elem :: xs
+          else x :: iter (k + 1) xs
+    in
+    iter 0 lst
+
+  let set-match n bpos epos s =
+    get-state >>= (fun ctx -> (
+      let matched = list-nth-set n (Some (bpos, epos, s)) ctx#matched in
+      put-state (| ctx with matched = matched |)
+    ))
+
+  let push-current-pos =
+    position >>= (fun pos -> (
+      get-state >>= (fun ctx -> (
+        let pos-stack = pos :: ctx#pos-stack in
+        put-state (| ctx with pos-stack = pos-stack |)
+      ))
+    ))
+
+  let pop-pos =
+    get-state >>= (fun ctx -> (
+      match ctx#pos-stack with
+      | [] -> problem `position stack is empty`
+      | pos :: rest ->
+          put-state (| ctx with pos-stack = rest |) >>
+          return pos
+    ))
+
+  let capture n =
+    get >>= (fun st -> (
+      pop-pos >>= (fun pos -> (
+        let curpos = Stream.position st in
+        let sub = string-sub (Stream.source st) pos (curpos - pos) in
+        set-match n pos curpos sub
+      ))
+    ))
+
+  let anchor kind =
+    match kind with
+    | BeginningOfLine -> bof
+    | EndOfLine -> eof
+    | WordBoundary -> word-boundary
+    | NonWordBoundary -> non-word-boundary
+
+  let back-ref n =
+    get-nth-match n >>= (fun submatch-opt -> (
+      match submatch-opt with
+      | None -> problem `matching group doesn't exist`
+      | Some (_, _, s) -> string s >> return ()
+    ))
+
+  let fetch =
+    get-state >>= (fun ctx -> (
+      match Vec.get ctx#inst-seq ctx#pc with
+      | None -> problem `invalid program counter`
+      | Some inst -> return inst
+    ))
+
+  let-rec next = fun st -> st |> (
+    increment-pc >> exec
+  )
+
+  and jump pc = fun st -> st |> (
+    set-pc pc >> exec
+  )
+
+  and exec = fun st -> st |> (
+    fetch >>= (fun inst -> (
+      match inst with
+      | OpEmpty ->
+          next
+      | OpChar c ->
+          match1 c >>
+          next
+      | OpAny ->
+          any1 >>
+          next
+      | OpString s ->
+          matchn s >>
+          next
+      | OpMatch ->
+          capture 0 >>
+          get-all-match
+      | OpSplit (pc1, pc2) ->
+          attempt (jump pc1) <|> jump pc2
+      | OpJump pc ->
+          jump pc
+      | OpAtomicExec (pc1, pc2) ->
+          jump pc1 >>
+          jump pc2
+      | OpStop ->
+          return []
+      | OpSaveStart ->
+          push-current-pos >>
+          next
+      | OpSaveEnd n ->
+          capture n >>
+          next
+      | OpSatisfy pred ->
+          match1p pred >>
+          next
+      | OpLookAhead (pc1, pc2) ->
+          look-ahead (jump pc1) >>
+          jump pc2
+      | OpNegLookAhead (pc1, pc2) ->
+          not-followed-by (jump pc1) >>
+          jump pc2
+      | OpLookBehind (len, pc1, pc2) ->
+          look-behind len (jump pc1) >>
+          jump pc2
+      | OpNegLookBehind (len, pc1, pc2) ->
+          not-followed-by (look-behind len (jump pc1)) >>
+          jump pc2
+      | OpAnchor kind ->
+          anchor kind >>
+          next
+      | OpBackRef n ->
+          back-ref n >>
+          next
+    ))
+  )
+
+  let run inst-seq n-save =
+    let ctx = (|
+      regex-vm-init with
+        inst-seq = inst-seq;
+        matched = list-make (n-save + 1) None;
+    |) in
+    put-state ctx >>
+    push-current-pos >>
+    exec
+
+end
