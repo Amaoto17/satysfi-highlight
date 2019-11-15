@@ -225,14 +225,15 @@ end = struct
                 rule >>= (fun (submatches, k) -> (
                   match k with
                   | Done -> iter (submatches :: acc) []
-                  | Continue stack1 -> iter (submatches :: acc) stack1
+                  | Continue stack1 -> iter (submatches :: acc) (List.reverse stack1)
                 ))
               )
             | top :: rest -> (
                 top >>= (fun (submatches, k) -> (
                   match k with
                   | Done -> iter (submatches :: acc) rest
-                  | Continue stack1 -> iter (submatches :: acc) (list-rev-append stack1 rest)
+                  | Continue stack1 ->
+                      iter (submatches :: acc) (list-rev-append stack1 rest)
                 ))
               )
           )
