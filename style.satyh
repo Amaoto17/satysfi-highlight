@@ -2,22 +2,15 @@ type style =
   | Array
   | List
   | Comment
+  | Constant
   | BooleanConstant
   | CharacterConstant
   | NumericConstant
+  | String
+  | FunctionName
   | TypeName
-  % | Keyword
-  % | NumericConstant
-  % | BooleanConstant
-  % | CharacterConstant
-  % | String
-  % | FunctionName
-  % | Constant
-  % | TypeName
-  % | Operator
-  % | ModuleName
-  % | Punctuation
-  % | Variable
-  % | Storage
-  % | Meta
-  % | CharacterConstant
+  | ModuleName
+  | VariableName
+  | ExceptionName
+  | Keyword
+  | Operator

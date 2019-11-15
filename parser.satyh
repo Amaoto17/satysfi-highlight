@@ -168,6 +168,7 @@ module Parser : sig
 
   val run : 'a parser -> Stream.t -> 'a parse-result
   val parse : 'a parser -> regex-vm option -> string -> 'a Error.t result
+  val debug : string -> unit parser
   val return : 'a -> 'a parser
   val (>>=) : 'a parser -> ('a -> 'b parser) -> 'b parser
   val (>>) : 'a parser -> 'b parser -> 'b parser
@@ -196,6 +197,8 @@ module Parser : sig
   val non-word-boundary : unit parser
   val many : 'a parser -> ('a list) parser
   val many1 : 'a parser -> ('a list) parser
+  val skip-many : 'a parser -> unit parser
+  val skip-many1 : 'a parser -> unit parser
   val choice : ('a parser) list -> 'a parser
   val opt-with : 'a -> 'a parser -> 'a parser
   val chainl : 'a parser -> ('a -> 'a -> 'a) parser -> 'a parser
@@ -204,6 +207,8 @@ module Parser : sig
   val none-of : string -> string parser
   val digit-char : string parser
   val decimal : int parser
+  val space : unit parser
+  val space1 : unit parser
 
 end = struct
 
@@ -320,6 +325,10 @@ end = struct
         if string-same s1 s then ConsumedOk (s1, st1, Error.empty (Stream.position st))
         else EmptyErr (Error.expected (`"` ^ s ^ `"`) (Stream.position st))
 
+  let debug msg st =
+    let () = display-message msg in
+    EmptyOk ((), st, Error.empty (Stream.position st))
+
   let fix f =
     let-rec p = fun st -> (f r)
     and r = fun st -> (p st) st in r
@@ -330,6 +339,13 @@ end = struct
 
   let many1 p =
     p >>= (fun x -> (many p >>= (fun xs -> return (x :: xs))))
+
+  let skip-many p = fix (fun self -> (
+    (p >> self) <|> return ()
+  ))
+
+  let skip-many1 p =
+    p >> skip-many p
 
   let look-ahead p =
     get >>= (fun st -> (
@@ -419,5 +435,11 @@ end = struct
   let digit-char = satisfy is-digit <?> `digit`
   
   let decimal = digits digit-char 10 <?> `decimal`
+
+  let space-char = satisfy is-space <?> `whitespace`
+
+  let space = skip-many space-char
+
+  let space1 = skip-many1 space-char
 
 end

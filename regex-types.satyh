@@ -22,7 +22,7 @@ type repeat =
 type node =
   | Char of string
   | Any
-  | String of string
+  | Str of string
   | Concat of node list
   | Alt of node * node
   | Opt of quantity * node

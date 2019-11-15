@@ -1,6 +1,8 @@
 @import: style
 @import: parser
 @import: regex
+@require: deco
+@import: color-scheme
 
 open Parser
 
@@ -44,11 +46,19 @@ end = struct
   let fix = Parser.fix
 
   let pattern pat =
+    % let () = display-message (#`  compiling .. `# ^ pat) in
     let re = Regex.compile pat in
     attempt (Regex.run re) >>= (fun matched -> (
       let submatches = matched |> List.map (fun data -> (data, Empty)) in
       return (submatches, Done)
     ))
+
+  let skip =
+    choice [
+      space1
+    ; skip-many1 (satisfy is-word-char) >> space
+    ; any >> space
+    ]
 
   let patterns = choice
 
@@ -95,7 +105,7 @@ end = struct
           | Continue stack ->
               continue (submatches-inner :: acc) stack
         ))
-      ; any >> iter acc lpos
+      ; skip >> iter acc lpos
       ]
     ) in
     position >>= (fun lpos -> (
@@ -214,8 +224,8 @@ end = struct
     let () = display-message ` ` in
     let () = List.iter print submatches in submatches
 
+
   let highlight ctx stack-init rule code =
-    let skip = pattern `\s+|\w+\s*|.\s*` in
     let p-line =
       let-rec iter acc stack = fun st -> st |> run (
         choice [

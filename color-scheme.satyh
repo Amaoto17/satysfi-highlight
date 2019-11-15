@@ -21,26 +21,15 @@ end = struct
   let color-of style =
     match style with
     | Comment           -> gray
+    | Constant          -> blue
     | BooleanConstant   -> blue
     | CharacterConstant -> blue
     | NumericConstant   -> green
+    | String            -> green
+    | FunctionName      -> yellow
     | TypeName          -> orange
+    | Keyword           -> red
+    | Operator          -> red
     | _                 -> foreground
-    % | Keyword -> red
-    % | NumericConstant -> green
-    % | CharacterConstant -> blue
-    % | String -> green
-    % | Comment -> gray
-    % | FunctionName -> yellow
-    % | BooleanConstant -> blue
-    % | Constant -> blue
-    % | TypeName -> orange
-    % | Operator -> red
-    % | Punctuation -> red
-    % | ModuleName -> orange
-    % | Variable -> foreground
-    % | Storage -> foreground
-    % | Meta -> foreground
-    % | CharacterConstant -> blue
 
 end

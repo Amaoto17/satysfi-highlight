@@ -265,9 +265,13 @@ end = struct
     ; backslash
     ; char `.` >> return Any
     ; single-anchor
-    ; item >>= (fun c ->
-        return (Char c)
-      )
+    ; many1 item >>= (fun cs -> (
+        let s = List.fold-left (^) ` ` cs in
+        return (Str s)
+      ))
+    % ; item >>= (fun c ->
+    %     return (Char c)
+    %   )
     ]
   )
 
@@ -542,7 +546,7 @@ end = struct
           emit (OpChar c)
       | Any ->
           emit OpAny
-      | String s ->
+      | Str s ->
           emit (OpString s)
       | Concat node-list ->
           List.iter iter node-list

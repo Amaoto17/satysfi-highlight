@@ -9,48 +9,84 @@ module OCaml : sig
 
 end = struct
 
-  let rule-array = fun deg ->
-    pattern-block (|
-      enter = pattern `\[\|`
-    ; leave = pattern `\|\]`
-    ; style = Some (Array)
-    ; inner = [deg]
-    |)
+  let rule-array =
+    let enter = pattern `\[\|` in
+    let leave = pattern `\|\]` in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = Some (Array)
+      ; inner = [deg]
+      |)
 
-  let rule-comment = fix (fun self -> (
-    pattern-block (|
-      enter = pattern `\(\*`
-    ; leave = pattern `\*\)`
-    ; style = Some (Comment)
-    ; inner = [self]
-    |)
-  ))
+  let rule-comment =
+    let enter = pattern `\(\*` in
+    let leave = pattern `\*\)` in
+    fix (fun self -> (
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = Some (Comment)
+      ; inner = [self]
+      |)
+    ))
 
   let rule-float =
-    pattern `-?\d[\d_]*\.([\d_]*)?([eE][+-]?\d[\d_]*)?`
-      |> capture 0 (style NumericConstant)
+    patterns [
+      pattern `-?0[xX]\h[\h_]*\.([\h_]*)?([pP][+-]?\d[\d_]*)?`
+    ; pattern `-?\d[\d_]*\.([\d_]*)?([eE][+-]?\d[\d_]*)?`
+    ]
 
   let rule-integer =
-    pattern `-?\d[\d_]*`
-      |> capture 0 (style NumericConstant)
+    patterns [
+      pattern `-?0[xX]\h[\h_]*`
+    ; pattern `-?0[oO][0-7][0-7_]*`
+    ; pattern `-?0[bB][01][01_]*`
+    ; pattern `-?\d[\d_]*`
+    ]
 
   let rule-constant =
     patterns [
       pattern `\b(true|false)\b`
         |> capture 0 (style BooleanConstant)
     ; rule-float
+        |> capture 0 (style NumericConstant)
     ; rule-integer
+        |> capture 0 (style NumericConstant)
     ; pattern `'(.|\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|[bnrt'"\\]))'`
         |> capture 0 (style CharacterConstant)
     ]
 
-  let rule-list = fun deg ->
-    pattern-block (|
-      enter = pattern `\[(?!\|)`
-    ; leave = pattern `(?<!\|)\]`
-    ; style = Some (List)
-    ; inner = [deg]
-    |)
+  let rule-string =
+    patterns [
+      pattern-block (|
+        enter = pattern `"`
+      ; leave = pattern `"`
+      ; style = Some (String)
+      ; inner = [
+          pattern `\\(x\h{2}|o[0-3][0-7]{2}|\d{3}|\u\{\h+\}|[bnrt'"\\])`
+            |> capture 0 (style CharacterConstant)
+        ]
+      |)
+    ; pattern-block (|
+        enter = pattern `\{[a-z_]*\|`
+      ; leave = pattern `\|[a-z_]*\}`
+      ; style = Some (String)
+      ; inner = []
+      |)
+    ]
+
+  let rule-list =
+    let enter = pattern `\[(?!\|)` in
+    let leave = pattern `(?<!\|)\]` in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = Some (List)
+      ; inner = [deg]
+      |)
 
   let rule-typename =
     patterns [
@@ -58,11 +94,310 @@ end = struct
         |> capture 0 (style TypeName)
     ]
 
+  let rule-typedef =
+    let typename =
+      pattern `[a-z_']\w*\b`
+        |> capture 0 (style TypeName)
+    in
+    let keyword =
+      pattern `\bof\b`
+        |> capture 0 (style Keyword)
+    in
+    let separator = pattern `\|` in
+    let variant-enter = pattern `\[` in
+    let variant-leave = pattern `\]` in
+    fun deg ->
+      fix (fun self -> (
+        patterns [
+          rule-typename
+        ; keyword
+        ; typename
+        ; pattern-block (|
+            enter = variant-enter
+          ; leave = variant-leave
+          ; style = None
+          ; inner = [self]
+          |)
+        ; separator
+        ; deg
+        ]
+      ))
+
+  let rule-variables =
+    let labeled-parameter =
+      pattern `(~)([a-z][\w']*)(\s*:\s*)?`
+        |> capture 1 (style Keyword)
+        |> capture 2 (style VariableName)
+    in
+    let optional-parameter-enter =
+      pattern `(\?)(\([a-z][\w']*)\s*(=)`
+        |> capture 1 (style Keyword)
+        |> capture 4 (style Operator)
+    in
+    let optional-parameter-leave = pattern `\)` in
+    let keyword =
+      pattern `\bas\b`
+        |> capture 0 (style Keyword)
+    in
+    fun deg ->
+      fix (fun self -> (
+        patterns [
+          rule-constant
+        ; labeled-parameter
+        ; pattern-block (|
+            enter = optional-parameter-enter
+          ; leave = optional-parameter-leave
+          ; style = None
+          ; inner = [deg]
+          |)
+        ; rule-typename
+        ; keyword
+        ]
+      ))
+
+  let rule-module-signature =
+    let enter =
+      pattern `\b(val|external)\s+\S+\s*:`
+        |> capture 1 (style Keyword)
+    in
+    let leave = pattern `(?=#|\b(type|val|external|class|module|end)\b|^\s*$)` in
+    let labeled =
+      pattern `(\??)([a-z][\w]*)\s*:`
+        |> capture 1 (style Keyword)
+    in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [
+          labeled
+        ; rule-typedef deg
+        ]
+      |)
+
+  let rule-module-binding =
+    pattern `\b(let)\s+(module)\s+([A-Z][\w']*)\s*(=)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style Keyword)
+      |> capture 3 (style ModuleName)
+      |> capture 4 (style Operator)
+
+  let rule-module-open-binding =
+    pattern `\b(let)\s+(open)\s+(\S+)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style Keyword)
+      |> capture 3 (style ModuleName)
+
+  let rule-let-function =
+    pattern `\b(let(?:\s+rec)?|and)\s*([a-z_][\w']*\s+)(?:[a-z_][\w']*\s+)*(=)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style FunctionName)
+      |> capture 3 (style Operator)
+
+  let rule-anonymous-fun =
+    let enter =
+      pattern `\bfun\s`
+        |> capture 0 (style Keyword)
+    in
+    let leave = pattern `->` in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [rule-variables deg]
+      |)
+
+  let rule-group =
+    let enter =
+      pattern `\b(struct|sig|begin)\b`
+        |> capture 1 (style Keyword)
+    in
+    let leave =
+      pattern `\bend\b`
+        |> capture 0 (style Keyword)
+    in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [deg]
+      |)
+
+  let rule-module =
+    pattern `^[ \t]*(module)\s+([A-Z_][\w']*)(?:\s*(:)\s*([A-Z][\w']*)?)?`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style ModuleName)
+      |> capture 4 (style ModuleName)
+
+  let rule-module-type =
+    pattern `^[ \t]*(module\s+type\s+)([A-Z][\w']*)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style ModuleName)
+
+  let rule-type-definition =
+    let enter =
+      pattern `\b(type|and)\s+([^=]*)(=?)`
+        |> capture 1 (style Keyword)
+        |> capture 2 (style TypeName)
+        |> capture 3 (style Operator)
+    in
+    let leave = pattern `(?=\b(type|and|let|end|val|module|include|open|exception|class|external)\b)` in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [rule-typedef deg]
+      |)
+
+  let rule-match-patterns =
+    let universal-match =
+      pattern `\b_\b`
+        |> capture 0 (style Constant)
+    in
+    fun deg ->
+      patterns [
+        universal-match
+      ; deg
+      ]
+
+  let rule-pattern-match =
+    let enter =
+      pattern `\b(with|function)\b|(\|)(?=.*->)`
+        |> capture 1 (style Keyword)
+        |> capture 2 (style Operator)
+    in
+    let leave =
+      pattern `->|\b(when)\b|\s*(?=\|)`
+        |> capture 1 (style Keyword)
+    in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [
+          rule-comment
+        ; rule-match-patterns deg
+        ]
+      |)
+
+  let rule-record =
+    let enter = pattern `{` in
+    let leave = pattern `}` in
+    let inner =
+      pattern `\bwith\b`
+        |> capture 0 (style Keyword)
+    in
+    let mutable-enter = 
+      pattern `(mutable)\s+([a-z_][\w']*)\s*:`
+        |> capture 1 (style Keyword)
+    in
+    let mutable-leave = pattern `;|(?=\})` in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [
+          pattern-block (|
+            enter = mutable-enter
+          ; leave = mutable-leave
+          ; style = None
+          ; inner = [inner; rule-typedef deg]
+          |)
+        ; deg
+        ]
+      |)
+
+  let rule-module-open =
+    pattern `\b(open)\s+([A-Z][\w']*)((?:\.[A-Z][\w']*)*)`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style ModuleName)
+      |> capture 3 (style ModuleName)
+
+  let rule-exception =
+    pattern `\b(exception)\s+([A-Z][\w']*)(?:\s+(of))?\b`
+      |> capture 1 (style Keyword)
+      |> capture 2 (style ExceptionName)
+      |> capture 3 (style Keyword)
+
+  let rule-operator =
+    patterns [
+      pattern `\b(mod|land|lor|lxor|lsl|lsr|asr|or)\b`
+        |> capture 0 (style Operator)
+    ; pattern `->`
+    ; pattern `:=`
+        |> capture 0 (style Operator)
+    ; pattern `[-=<>@^|\&+*/$%][-!$%\&*+./:<=>?@^|~]*`
+        |> capture 0 (style Operator)
+    ; pattern `#[-!$%\&*+./:<=>?@^|~]+`
+        |> capture 0 (style Operator)
+    ; pattern `![-!$%\&*+./:<=>?@^|~]*`
+        |> capture 0 (style Operator)
+    ; pattern `[?~][-!$%\&*+./:<=>?@^|~]+`
+        |> capture 0 (style Operator)
+    ]
+
+  let rule-loop =
+    let enter =
+      pattern `\b(while|for)\b`
+        |> capture 0 (style Keyword)
+    in
+    let leave =
+      pattern `\b(done)\b`
+        |> capture 0 (style Keyword)
+    in
+    let inner =
+      pattern `\b(do)\b`
+        |> capture 0 (style Keyword)
+    in
+    fun deg ->
+      pattern-block (|
+        enter = enter
+      ; leave = leave
+      ; style = None
+      ; inner = [inner; deg]
+      |)
+
+  let rule-variant =
+    pattern ``(`?|\b)[A-Z][\w']*\b``
+      |> capture 0 (style Constant)
+
+  let rule-keywords =
+    patterns [
+      pattern `\b(downto|if|else|match|then|to|when|with|try)\b`
+        |> capture 0 (style Keyword)
+    ; pattern `\b(as|assert|class|constraint|exception|external|functor|in|include|inherit|initializer|lazy|let|module|mutable|new|object|open|private|rec|sig|struct|type|virtual)\b`
+        |> capture 0 (style Keyword)
+    ]
+
   let rule = fix (fun self -> (
     patterns [
       rule-constant
     ; rule-typename
+    ; rule-module-binding
+    ; rule-module-open-binding
+    ; rule-let-function
+    ; rule-anonymous-fun self
+    ; rule-group self
+    ; rule-module
+    ; rule-module-type
+    ; rule-type-definition self
+    ; rule-pattern-match self
+    ; rule-module-signature self
+    ; rule-module-open
+    ; rule-exception
+    ; rule-loop self
+    ; rule-variant
+    ; rule-keywords
+    ; rule-string
+    ; rule-record self
     ; rule-comment
+    ; rule-operator
     ; rule-array self
     ; rule-list self
     ]
