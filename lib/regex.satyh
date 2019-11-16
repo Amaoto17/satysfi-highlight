@@ -1,6 +1,5 @@
-@import: regex/types/export
+@import: regex/types
 @import: regex/compiler
-@import: regex/exec
 @import: parser
 
 open Parser
@@ -8,13 +7,10 @@ open Parser
 
 module Regex : sig
 
-  val compile : string -> regex
-  val run : regex -> (match-data list) parser
+  val compile : string -> (match-data list) parser
 
 end = struct
 
   let compile = Compiler.compile
-
-  let run re = Exec.run re#inst-seq re#n-save
 
 end

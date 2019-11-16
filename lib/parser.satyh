@@ -1,6 +1,6 @@
 @require: list
 @import: utils
-@import: regex/types/export
+@import: regex/types
 
 
 type 'a 'b result =
@@ -199,6 +199,7 @@ module Parser : sig
   val many1 : 'a parser -> ('a list) parser
   val skip-many : 'a parser -> unit parser
   val skip-many1 : 'a parser -> unit parser
+  val skip-count : int -> 'a parser -> unit parser
   val choice : ('a parser) list -> 'a parser
   val opt-with : 'a -> 'a parser -> 'a parser
   val chainl : 'a parser -> ('a -> 'a -> 'a) parser -> 'a parser
@@ -346,6 +347,10 @@ end = struct
 
   let skip-many1 p =
     p >> skip-many p
+
+  let-rec skip-count n p =
+    if n < 0 then problem `count must not be negative number`
+    else if n == 0 then return () else p >> skip-count (n - 1) p
 
   let look-ahead p =
     get >>= (fun st -> (

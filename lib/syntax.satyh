@@ -1,6 +1,6 @@
 @import: ../style
 @import: parser
-@import: regex/types/export
+@import: regex/types
 @import: regex
 
 open Parser
@@ -45,9 +45,8 @@ end = struct
   let fix = Parser.fix
 
   let pattern pat =
-    % let () = display-message (#`  compiling .. `# ^ pat) in
     let re = Regex.compile pat in
-    attempt (Regex.run re) >>= (fun matched -> (
+    attempt re >>= (fun matched -> (
       let submatches = matched |> List.map (fun data -> (data, Empty)) in
       return (submatches, Done)
     ))

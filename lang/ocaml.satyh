@@ -184,7 +184,7 @@ end = struct
       |> capture 4 (style Operator)
 
   let rule-module-open-binding =
-    pattern `\b(let)\s+(open)\s+(\S+)`
+    pattern `\b(let)\s+(open)\s+([A-Z][\w']*(\.[A-Z][\w']*)*)`
       |> capture 1 (style Keyword)
       |> capture 2 (style Keyword)
       |> capture 3 (style ModuleName)

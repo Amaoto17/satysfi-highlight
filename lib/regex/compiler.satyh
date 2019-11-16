@@ -1,9 +1,6 @@
-@import: types/common
-@import: types/ast
-@import: types/inst
-@import: types/export
+@import: ast
+@import: types
 @import: syntax
-@import: ../vector
 @import: ../parser
 
 open Parser
@@ -11,139 +8,161 @@ open Parser
 
 module Compiler : sig
 
-  val compile : string -> regex
+  val compile : string -> (match-data list) parser
 
 end = struct
 
-  let build ast =
-    let inst-seq = Vec.create () in
-    let emit inst = Vec.push inst-seq inst in
-    let curpos () = Vec.size inst-seq in
-    let reserve () =
-      let i = curpos () in
-      let () = emit OpEmpty in
-      fun inst -> Vec.set inst-seq i inst
+  let get-nth-match n =
+    get-state >>= (fun ctx -> (
+      let len = List.length ctx#matched in
+      let submatch = Option.from None (List.nth n ctx#matched) in
+      return submatch
+    ))
+
+  let get-all-match =
+    get-state >>= (fun ctx -> (
+      return ctx#matched
+    ))
+
+  let list-nth-set n elem lst =
+    let-rec iter k lst =
+      match lst with
+      | [] -> []
+      | x :: xs ->
+          if k == n then elem :: xs
+          else x :: iter (k + 1) xs
     in
-    let-mutable n-save <- 0 in
-    let-rec iter node =
+    iter 0 lst
+
+  let set-match n bpos epos s =
+    get-state >>= (fun ctx -> (
+      let matched = list-nth-set n (Some (bpos, epos, s)) ctx#matched in
+      put-state (| ctx with matched = matched |)
+    ))
+
+  let push-current-pos =
+    position >>= (fun pos -> (
+      get-state >>= (fun ctx -> (
+        let pos-stack = pos :: ctx#pos-stack in
+        put-state (| ctx with pos-stack = pos-stack |)
+      ))
+    ))
+
+  let pop-pos =
+    get-state >>= (fun ctx -> (
+      match ctx#pos-stack with
+      | [] -> problem `position stack is empty`
+      | pos :: rest ->
+          put-state (| ctx with pos-stack = rest |) >>
+          return pos
+    ))
+
+  let capture n =
+    get >>= (fun st -> (
+      pop-pos >>= (fun pos -> (
+        let curpos = Stream.position st in
+        let sub = string-sub (Stream.source st) pos (curpos - pos) in
+        set-match n pos curpos sub
+      ))
+    ))
+
+  let back-ref n =
+    get-nth-match n >>= (fun submatch-opt -> (
+      match submatch-opt with
+      | None -> problem `matching group doesn't exist`
+      | Some (_, _, s) -> string s >> return ()
+    ))
+
+  let unwrap p-opt = Option.from (return ()) p-opt
+
+  let build n-group ast =
+    let-rec walk next-opt node =
       match node with
-      | Char c ->
-          emit (OpChar c)
-      | Any ->
-          emit OpAny
-      | Str s ->
-          emit (OpString s)
-      | Concat node-list ->
-          List.iter iter node-list
+      | Char c -> char c >> unwrap next-opt
+      | Any -> any >> unwrap next-opt
+      | Str s -> string s >> unwrap next-opt
+      | Satisfy pred -> satisfy pred >> unwrap next-opt
+      | Concat ts ->
+          List.fold-right (fun t next-opt -> Some (walk next-opt t)) next-opt ts |> unwrap
       | Alt (t1, t2) ->
-          let set-split = reserve () in
-          let t1-begin = curpos () in
-          let () = iter t1 in
-          let set-jump = reserve () in
-          let t2-begin = curpos () in
-          let () = iter t2 in
-          let () = set-split (OpSplit (t1-begin, t2-begin)) in
-          set-jump (OpJump (curpos ()))
-      | Opt (quantity, t) ->
-          let emitter () =
-            let set-split = reserve () in
-            let t-begin = curpos () in
-            let () = iter t in
-            (set-split, t-begin)
-          in
-          emit-quantify emitter quantity
-      | Many (quantity, t) ->
-          let emitter () =
-            let loop-begin = curpos () in
-            let set-split = reserve () in
-            let t-begin = curpos () in
-            let () = iter t in
-            let () = emit (OpJump loop-begin) in
-            (set-split, t-begin)
-          in
-          emit-quantify emitter quantity
-      | Many1 (quantity, t) ->
-          let emitter () =
-            let t-begin = curpos () in
-            let () = iter t in
-            let set-split = reserve () in
-            (set-split, t-begin)
-          in
-          emit-quantify emitter quantity
-      | Group t ->
-          let () = n-save <- !n-save + 1 in
-          let n = !n-save in
-          let () = emit OpSaveStart in
-          let () = iter t in
-          emit (OpSaveEnd n)
-      | Satisfy pred ->
-          emit (OpSatisfy pred)
-      | LookAhead t ->
-          let set-look-ahead = reserve () in
-          let t-begin = curpos () in
-          let () = iter t in
-          let () = emit OpStop in
-          set-look-ahead (OpLookAhead (t-begin, curpos ()))
-      | NegLookAhead t ->
-          let set-neg-look-ahead = reserve () in
-          let t-begin = curpos () in
-          let () = iter t in
-          let () = emit OpStop in
-          set-neg-look-ahead (OpNegLookAhead (t-begin, curpos ()))
-      | LookBehind (len, t) ->
-          let set-look-behind = reserve () in
-          let t-begin = curpos () in
-          let () = iter t in
-          let () = emit OpStop in
-          set-look-behind (OpLookBehind (len, t-begin, curpos ()))
-      | NegLookBehind (len, t) ->
-          let set-neg-look-behind = reserve () in
-          let t-begin = curpos () in
-          let () = iter t in
-          let () = emit OpStop in
-          set-neg-look-behind (OpNegLookBehind (len, t-begin, curpos ()))
-      | Anchor kind ->
-          emit (OpAnchor kind)
-      | BackRef n ->
-          emit (OpBackRef n)
-      | Repeat (kind, quantity, t) -> (
-          match kind with
-          | Just n ->
-              for n (fun _ -> iter t)
-          | AtLeast n ->
-              let () = for n (fun _ -> iter t) in
-              iter (Many (quantity, t))
-          | AtMost n ->
-              for n (fun _ -> iter (Opt (quantity, t)))
-          | Between (m, n) ->
-              let () = for m (fun _ -> iter t) in
-              for (n - m) (fun _ -> iter (Opt (quantity, t)))
+          let p1 = walk next-opt t1 in
+          let p2 = walk next-opt t2 in
+          attempt p1 <|> p2
+      | Opt (q, t) -> (
+          let p = walk None t in
+          match q with
+          | Greedy -> attempt (p >> unwrap next-opt) <|> unwrap next-opt
+          | Reluctant -> attempt (unwrap next-opt) <|> (p >> unwrap next-opt)
+          | Possessive -> opt-with () p >> unwrap next-opt
         )
-      | Atomic t ->
-          let set-atomic-exec = reserve () in
-          let t-begin = curpos () in
-          let () = iter t in
-          let () = emit OpStop in
-          set-atomic-exec (OpAtomicExec (t-begin, curpos ()))
-    and emit-quantify emitter quantity =
-      match quantity with
-      | Greedy ->
-          let (set-split, t-begin) = emitter () in
-          set-split (OpSplit (t-begin, curpos ()))
-      | Reluctant ->
-          let (set-split, t-begin) = emitter () in
-          set-split (OpSplit (curpos (), t-begin))
-      | Possessive ->
-          let set-atomic-exec = reserve () in
-          let loop-begin = curpos () in
-          let (set-split, t-begin) = emitter () in
-          let () = set-split (OpSplit (t-begin, curpos ())) in
-          let () = emit OpStop in
-          set-atomic-exec (OpAtomicExec (loop-begin, curpos ()))
+      | Many (q, t) -> (
+          let p = walk None t in
+          match q with
+          | Greedy -> fix (fun self -> attempt (p >> self) <|> unwrap next-opt)
+          | Reluctant -> fix (fun self -> attempt (unwrap next-opt) <|> (p >> self))
+          | Possessive -> skip-many p >> unwrap next-opt
+        )
+      | Many1 (q, t) -> (
+          let p = walk None t in
+          match q with
+          | Greedy -> fix (fun self -> p >> (attempt self <|> unwrap next-opt))
+          | Reluctant -> fix (fun self -> p >> (attempt (unwrap next-opt) <|> self))
+          | Possessive -> skip-many1 p >> unwrap next-opt
+        )
+      | Group (n, t) ->
+          push-current-pos >>
+          walk (Some (capture n >> unwrap next-opt)) t
+      | Atomic t -> walk None t >> unwrap next-opt
+      | BackRef n -> back-ref n >> unwrap next-opt
+      | LookAhead t -> look-ahead (walk None t) >> unwrap next-opt
+      | NegLookAhead t -> not-followed-by (walk None t) >> unwrap next-opt
+      | LookBehind (len, t) -> look-behind len (walk None t) >> unwrap next-opt
+      | NegLookBehind (len, t) -> not-followed-by (look-behind len (walk None t)) >> unwrap next-opt
+      | Anchor kind -> (
+          match kind with
+          | BeginningOfLine -> bof
+          | EndOfLine -> eof
+          | WordBoundary -> word-boundary
+          | NonWordBoundary -> non-word-boundary
+        ) >> unwrap next-opt
+      | Repeat (kind, q, t) -> (
+          let p = walk None t in
+          match kind with
+          | Just n -> skip-count n p >> unwrap next-opt
+          | AtLeast n -> skip-count n p >> walk next-opt (Many (q, t))
+          | AtMost n -> skip-count n (walk next-opt (Opt (q, t)))
+          | Between (m, n) -> skip-count m p >> skip-count (n - m) (walk next-opt (Opt (q, t)))
+        )
     in
-    let () = iter ast in
-    let () = emit OpMatch in
-    (| inst-seq = inst-seq; n-save = !n-save |)
+    let ctx = (| regex-vm-init with matched = list-make (n-group + 1) None |) in
+    put-state ctx >>
+    push-current-pos >>
+    walk None ast >>
+    capture 0 >>
+    get-all-match
+
+  let optimize ast =
+    let-mutable n-group <- 0 in
+    let-rec walk node =
+      match node with
+      | Concat ts -> Concat (List.map walk ts)
+      | Alt (t1, t2) -> Alt (walk t1, walk t2)
+      | Opt (q, t) -> Opt (q, walk t)
+      | Many (q, t) -> Many (q, walk t)
+      | Many1 (q, t) -> Many1 (q, walk t)
+      | Group (_, t) ->
+          let () = n-group <- !n-group + 1 in
+          Group (!n-group, walk t)
+      | Atomic t -> Atomic (walk t)
+      | LookAhead t -> LookAhead (walk t)
+      | NegLookAhead t -> NegLookAhead (walk t)
+      | LookBehind (len, t) -> LookBehind (len, walk t)
+      | NegLookBehind (len, t) -> NegLookBehind (len, walk t)
+      | Repeat (kind, q, t) -> Repeat (kind, q, walk t)
+      | _ -> node
+    in
+    let ast = walk ast in
+    (ast, !n-group)
 
 
   let string-make len c =
@@ -170,7 +189,9 @@ end = struct
 
   let compile pat =
     match parse Syntax.re None pat with
-    | Ok ast -> ast |> build
+    | Ok ast ->
+        let (ast, n-group) = optimize ast in
+        build n-group ast
     | Error err -> error pat err
 
 end

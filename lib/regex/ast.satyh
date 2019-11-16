@@ -1,4 +1,19 @@
-@import: common
+type quantity =
+  | Greedy
+  | Reluctant
+  | Possessive
+
+type anchor =
+  | BeginningOfLine
+  | EndOfLine
+  | WordBoundary
+  | NonWordBoundary
+
+type repeat =
+  | Just of int
+  | AtLeast of int
+  | AtMost of int
+  | Between of int * int
 
 
 type node =
@@ -10,7 +25,7 @@ type node =
   | Opt of quantity * node
   | Many of quantity * node
   | Many1 of quantity * node
-  | Group of node
+  | Group of int * node
   | Satisfy of string -> bool
   | LookAhead of node
   | NegLookAhead of node

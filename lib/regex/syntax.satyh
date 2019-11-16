@@ -1,5 +1,4 @@
-@import: types/common
-@import: types/ast
+@import: ast
 @import: ../parser
 
 open Parser
@@ -199,7 +198,7 @@ end = struct
               if len1 == len2 then Some len1 else None
           | _ -> None
         )
-      | Group t -> walk t
+      | Group (_, t) -> walk t
       | Satisfy _ -> Some 1
       | LookAhead _ -> Some 0
       | NegLookAhead _ -> Some 0
@@ -251,7 +250,7 @@ end = struct
         ; char `:` >> alt
         ]
     ; alt >>= (fun t -> (
-        return (Group t)
+        return (Group (-1, t))
       ))
     ] << char `)`
   )
