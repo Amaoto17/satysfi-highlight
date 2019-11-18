@@ -190,6 +190,7 @@ module Parser : sig
   val look-ahead : 'a parser -> 'a parser
   val not-followed-by : 'a parser -> unit parser
   val look-behind : int -> 'a parser -> 'a parser
+  val not-preceded-by : int -> 'a parser -> unit parser
   val any : string parser
   val eof : unit parser
   val bof : unit parser
@@ -375,6 +376,19 @@ end = struct
         p >>= (fun x -> (
           put st >> return x
         ))
+    ))
+
+  let not-preceded-by len p =
+    get >>= (fun st -> (
+      let pos = Stream.position st in
+      if pos < len then unexpected `beginning of input`
+      else
+        set-position (pos - len) >>
+        attempt (
+          ( attempt p >>
+            unexpected `preceding`
+          ) <|> put st >> return ()
+        )
     ))
 
   let any = satisfy (fun _ -> true)

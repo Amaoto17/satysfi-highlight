@@ -73,72 +73,74 @@ end = struct
       | Some (_, _, s) -> string s >> return ()
     ))
 
-  let unwrap p-opt = Option.from (return ()) p-opt
+  let terminal = return ()
 
   let build n-group ast =
-    let-rec walk next-opt node =
+    let-rec walk node cont =
       match node with
-      | Char c -> char c >> unwrap next-opt
-      | Any -> any >> unwrap next-opt
-      | Str s -> string s >> unwrap next-opt
-      | Satisfy pred -> satisfy pred >> unwrap next-opt
-      | Concat ts ->
-          List.fold-right (fun t next-opt -> Some (walk next-opt t)) next-opt ts |> unwrap
+      | Char c -> char c >> cont
+      | Any -> any >> cont
+      | Str s -> string s >> cont
+      | Satisfy pred -> satisfy pred >> cont
+      | Concat ts -> List.fold-right walk cont ts
       | Alt (t1, t2) ->
-          let p1 = walk next-opt t1 in
-          let p2 = walk next-opt t2 in
+          let p1 = walk t1 cont in
+          let p2 = walk t2 cont in
           attempt p1 <|> p2
       | Opt (q, t) -> (
-          let p = walk None t in
+          let p = walk t terminal in
           match q with
-          | Greedy -> attempt (p >> unwrap next-opt) <|> unwrap next-opt
-          | Reluctant -> attempt (unwrap next-opt) <|> (p >> unwrap next-opt)
-          | Possessive -> opt-with () p >> unwrap next-opt
+          | Greedy -> attempt (p >> cont) <|> cont
+          | Reluctant -> attempt cont <|> (p >> cont)
+          | Possessive -> opt-with () p >> cont
         )
       | Many (q, t) -> (
-          let p = walk None t in
+          let p = walk t terminal in
           match q with
-          | Greedy -> fix (fun self -> attempt (p >> self) <|> unwrap next-opt)
-          | Reluctant -> fix (fun self -> attempt (unwrap next-opt) <|> (p >> self))
-          | Possessive -> skip-many p >> unwrap next-opt
+          | Greedy -> fix (fun self -> attempt (p >> self) <|> cont)
+          | Reluctant -> fix (fun self -> attempt cont <|> (p >> self))
+          | Possessive -> skip-many p >> cont
         )
       | Many1 (q, t) -> (
-          let p = walk None t in
+          let p = walk t terminal in
           match q with
-          | Greedy -> fix (fun self -> p >> (attempt self <|> unwrap next-opt))
-          | Reluctant -> fix (fun self -> p >> (attempt (unwrap next-opt) <|> self))
-          | Possessive -> skip-many1 p >> unwrap next-opt
+          | Greedy -> fix (fun self -> p >> (attempt self <|> cont))
+          | Reluctant -> fix (fun self -> p >> (attempt cont <|> self))
+          | Possessive -> skip-many1 p >> cont
         )
       | Group (n, t) ->
           push-current-pos >>
-          walk (Some (capture n >> unwrap next-opt)) t
-      | Atomic t -> walk None t >> unwrap next-opt
-      | BackRef n -> back-ref n >> unwrap next-opt
-      | LookAhead t -> look-ahead (walk None t) >> unwrap next-opt
-      | NegLookAhead t -> not-followed-by (walk None t) >> unwrap next-opt
-      | LookBehind (len, t) -> look-behind len (walk None t) >> unwrap next-opt
-      | NegLookBehind (len, t) -> not-followed-by (look-behind len (walk None t)) >> unwrap next-opt
+          walk t (capture n >> cont)
+      | Atomic t -> walk t terminal >> cont
+      | BackRef n -> back-ref n >> cont
+      | LookAhead t ->
+          look-ahead (walk t terminal) >> cont
+      | NegLookAhead t ->
+          not-followed-by (walk t terminal) >> cont
+      | LookBehind (len, t) ->
+          look-behind len (walk t terminal) >> cont
+      | NegLookBehind (len, t) ->
+          not-preceded-by len (walk t terminal) >> cont
       | Anchor kind -> (
           match kind with
           | BeginningOfLine -> bof
           | EndOfLine -> eof
           | WordBoundary -> word-boundary
           | NonWordBoundary -> non-word-boundary
-        ) >> unwrap next-opt
+        ) >> cont
       | Repeat (kind, q, t) -> (
-          let p = walk None t in
+          let p = walk t terminal in
           match kind with
-          | Just n -> skip-count n p >> unwrap next-opt
-          | AtLeast n -> skip-count n p >> walk next-opt (Many (q, t))
-          | AtMost n -> skip-count n (walk next-opt (Opt (q, t)))
-          | Between (m, n) -> skip-count m p >> skip-count (n - m) (walk next-opt (Opt (q, t)))
+          | Just n -> skip-count n p >> cont
+          | AtLeast n -> skip-count n p >> walk (Many (q, t)) cont
+          | AtMost n -> skip-count n (walk (Opt (q, t)) cont)
+          | Between (m, n) -> skip-count m p >> skip-count (n - m) (walk (Opt (q, t)) cont)
         )
     in
     let ctx = (| regex-vm-init with matched = list-make (n-group + 1) None |) in
     put-state ctx >>
     push-current-pos >>
-    walk None ast >>
-    capture 0 >>
+    walk ast (capture 0) >>
     get-all-match
 
   let optimize ast =
