@@ -1,3 +1,4 @@
+@require: option
 @import: ast
 @import: types
 @import: syntax
@@ -147,7 +148,7 @@ end = struct
     let-mutable n-group <- 0 in
     let-rec walk node =
       match node with
-      | Concat ts -> Concat (List.map walk ts)
+      | Concat ts -> opt-concat ` ` [] ts
       | Alt (t1, t2) -> Alt (walk t1, walk t2)
       | Opt (q, t) -> Opt (q, walk t)
       | Many (q, t) -> Many (q, walk t)
@@ -162,6 +163,12 @@ end = struct
       | NegLookBehind (len, t) -> NegLookBehind (len, walk t)
       | Repeat (kind, q, t) -> Repeat (kind, q, walk t)
       | _ -> node
+    and opt-concat s acc ts =
+      let add-str s acc = if string-same s ` ` then acc else (Str s :: acc) in
+      match ts with
+      | [] -> Concat (List.reverse (add-str s acc))
+      | (Char c) :: rest -> opt-concat (s ^ c) acc rest
+      | t :: rest -> opt-concat ` ` (walk t :: add-str s acc) rest
     in
     let ast = walk ast in
     (ast, !n-group)

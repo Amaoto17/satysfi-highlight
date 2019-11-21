@@ -1,0 +1,19 @@
+@import: ../lib/syntax
+@import: ../style
+
+open Syntax
+
+
+module Test : sig
+
+  val rule : rule
+
+end = struct
+
+  let rule =
+    patterns [
+      pattern `abc*d`
+        |> capture 0 (style Keyword)
+    ]
+
+end

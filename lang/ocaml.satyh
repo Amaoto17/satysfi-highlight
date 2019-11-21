@@ -363,6 +363,10 @@ end = struct
       ; inner = [inner; deg]
       |)
 
+  let rule-module-ref =
+    pattern `([A-Z][\w']*)\.`
+      |> capture 1 (style ModuleName)
+
   let rule-variant =
     pattern ``(`?|\b)[A-Z][\w']*\b``
       |> capture 0 (style Constant)
@@ -392,6 +396,7 @@ end = struct
     ; rule-module-open
     ; rule-exception
     ; rule-loop self
+    ; rule-module-ref
     ; rule-variant
     ; rule-keywords
     ; rule-string

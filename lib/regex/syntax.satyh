@@ -262,13 +262,7 @@ end = struct
     ; backslash
     ; char `.` >> return Any
     ; single-anchor
-    ; many1 item >>= (fun cs -> (
-        let s = List.fold-left (^) ` ` cs in
-        return (Str s)
-      ))
-    % ; item >>= (fun c ->
-    %     return (Char c)
-    %   )
+    ; item >>= (fun c -> return (Char c))
     ]
   )
 
