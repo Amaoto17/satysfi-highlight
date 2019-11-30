@@ -44,8 +44,10 @@ let is-upper     = string-match (regexp-of-string `[A-Z]`)
 let is-letter    = string-match (regexp-of-string `[a-zA-Z]`)
 let is-alpha-num = string-match (regexp-of-string `[0-9a-zA-Z]`)
 let is-word-char = string-match (regexp-of-string `[0-9a-zA-Z_]`)
-let is-space     = string-match (regexp-of-string `[ \n\t\r]`)
 
 let newline-char = string-unexplode [10]
 let return-char  = string-unexplode [13]
 let tab-char     = string-unexplode [9]
+
+let is-space = string-match (regexp-of-string (
+  `[ `# ^ newline-char ^ return-char ^ tab-char ^ `]`))
