@@ -14,13 +14,13 @@ let control-char =
 let shorthand =
   choice [
     char `w` >> return is-word-char
-  ; char `W` >> return (negate is-word-char)
+  ; char `W` >> return (UFun.negate is-word-char)
   ; char `d` >> return is-digit
-  ; char `D` >> return (negate is-digit)
+  ; char `D` >> return (UFun.negate is-digit)
   ; char `s` >> return is-space
-  ; char `S` >> return (negate is-space)
+  ; char `S` >> return (UFun.negate is-space)
   ; char `h` >> return is-hex-digit
-  ; char `H` >> return (negate is-hex-digit)
+  ; char `H` >> return (UFun.negate is-hex-digit)
   ]
 
 
@@ -49,7 +49,7 @@ end = struct
           string-match pat
       | Class t -> iter t
       | Shorthand pred -> pred
-      | Not t -> negate (iter t)
+      | Not t -> UFun.negate (iter t)
       | Prod (t1, t2) -> fun x -> iter t1 x && iter t2 x
       | Union (t1, t2) -> fun x -> iter t1 x || iter t2 x
     in

@@ -138,7 +138,7 @@ end = struct
           | Between (m, n) -> skip-count m p >> skip-count (n - m) (walk (Opt (q, t)) cont)
         )
     in
-    let ctx = (| regex-vm-init with matched = list-make (n-group + 1) None |) in
+    let ctx = (| regex-vm-init with matched = UList.make (n-group + 1) None |) in
     put-state ctx >>
     push-current-pos >>
     walk ast (capture 0) >>
@@ -164,7 +164,7 @@ end = struct
       | Repeat (kind, q, t) -> Repeat (kind, q, walk t)
       | _ -> node
     and opt-concat s acc ts =
-      let add-str s acc = if string-same s ` ` then acc else (Str s :: acc) in
+      let add-str s acc = if UString.is-empty s then acc else (Str s :: acc) in
       match ts with
       | [] -> Concat (List.reverse (add-str s acc))
       | (Char c) :: rest -> opt-concat (s ^ c) acc rest
@@ -187,14 +187,14 @@ end = struct
     let pos = Error.position err in
     let () = display-message #` ---- ---- ---- ----`# in
     let () = display pat in
-    let () = display (string-make pos #` `# ^ `^`) in
+    let () = display (UString.make pos #` `# ^ `^`) in
     let () =
-      if not (string-same prob ` `) then display prob
+      if not (UString.is-empty prob) then display prob
       else
-        let () = if string-same unexp ` ` then () else display unexp in
-        if string-same exp ` ` then () else display exp
+        let () = if UString.is-empty unexp then () else display unexp in
+        if UString.is-empty exp then () else display exp
     in
-    abort-with-message (#`Parse error in character `# ^ arabic pos)
+    abort-with-message (`Parse error in character `# ^ arabic pos)
 
   let compile pat =
     match parse Syntax.re None pat with

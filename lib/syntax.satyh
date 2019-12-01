@@ -88,9 +88,6 @@ end = struct
 
   let patterns = choice
 
-  let list-rev-concat lst =
-    lst |> List.reverse |> List.concat
-
   let pattern-block b =
     let color-ctx =
       match b#style with
@@ -163,7 +160,7 @@ end = struct
     let p =
       let-rec iter acc = fun st -> st |> run (
         choice [
-          eof >> return (list-rev-concat acc)
+          eof >> return (UList.rev-concat acc)
         ; rule >>= (fun (submatches, k) -> (
             match k with
             | Done -> iter (submatches :: acc)
@@ -255,7 +252,7 @@ end = struct
     let p-line =
       let-rec iter acc stack = fun st -> st |> run (
         choice [
-          eof >> return (list-rev-concat acc, stack)
+          eof >> return (UList.rev-concat acc, stack)
         ; ( match stack with
             | [] -> (
                 rule >>= (fun (submatches, k) -> (
@@ -269,7 +266,7 @@ end = struct
                   match k with
                   | Done -> iter (submatches :: acc) rest
                   | Continue stack1 ->
-                      iter (submatches :: acc) (list-rev-append stack1 rest)
+                      iter (submatches :: acc) (UList.rev-append stack1 rest)
                 ))
               )
           )

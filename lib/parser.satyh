@@ -118,11 +118,6 @@ end = struct
     err with err-pos = pos;
   |)
 
-  let string-concat sep xs =
-    match xs with
-    | [] -> ` `
-    | x :: rest -> List.fold-left (fun acc x -> acc ^ sep ^ x) x rest
-
   let format t =
     let-rec iter (unexp, exp, prob) messages =
       match messages with
@@ -130,12 +125,12 @@ end = struct
           let msg-unexp =
             match unexp with
             | [] -> ` `
-            | msg :: _ -> #`unexpected `# ^ msg
+            | msg :: _ -> `unexpected `# ^ msg
           in
           let msg-exp =
-            let expect = (string-concat #` or `# exp) in
-            if string-same expect ` ` then ` `
-            else #`expected `# ^ expect
+            let expect = (UString.concat #` or `# exp) in
+            if UString.is-empty expect then ` `
+            else `expected `# ^ expect
           in
           let msg-prob =
             match prob with
@@ -446,12 +441,12 @@ end = struct
 
   let char c = satisfy (string-same c) <?> (`'` ^ c ^ `'`)
 
-  let one-of cs = satisfy (string-contains cs)
+  let one-of cs = satisfy (UString.contains cs)
 
-  let none-of cs = satisfy (negate (string-contains cs))
+  let none-of cs = satisfy (UFun.negate (UString.contains cs))
 
   let digits p base =
-    let digit = p |> map (string-index `0123456789` 0) in
+    let digit = p |> map (UString.index `0123456789` 0) in
     let f acc x = acc * base + x in
     many1 digit |> map (List.fold-left f 0)
 

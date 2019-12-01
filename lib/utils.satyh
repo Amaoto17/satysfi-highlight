@@ -1,39 +1,63 @@
-let string-contains s c =
-  let len = string-length s in
-  let-rec iter k =
-    if k >= len then false
-    else
-      let c1 = string-sub s k 1 in
-      if string-same c c1 then true
-      else iter (k + 1)
-  in
-  iter 0
+@require: list
 
-let string-index s init-pos c =
-  let-rec iter k =
-    if k == string-length s then k
-    else
-      let c1 = string-sub s k 1 in
-      if string-same c1 c then k else iter (k + 1)
-  in
-  iter init-pos
 
-let negate pred x = not (pred x)
+module UString = struct
 
-let-rec for n f =
-  if n == 0 then () else let () = f () in for (n - 1) f
+  let is-empty = string-same ` `
 
-let list-make n init =
-  let-rec iter acc k =
-    if k == n then acc
-    else iter (init :: acc) (k + 1)
-  in
-  iter [] 0
+  let concat sep xs =
+    match xs with
+    | [] -> ` `
+    | x :: rest -> List.fold-left (fun acc x -> acc ^ sep ^ x) x rest
 
-let-rec list-rev-append xs ys =
-  match xs with
-  | [] -> ys
-  | x :: rest -> list-rev-append rest (x :: ys)
+  let contains s c =
+    let len = string-length s in
+    let-rec iter k =
+      if k >= len then false
+      else
+        let c1 = string-sub s k 1 in
+        if string-same c c1 then true
+        else iter (k + 1)
+    in
+    iter 0
+
+  let index s init-pos c =
+    let-rec iter k =
+      if k == string-length s then k
+      else
+        let c1 = string-sub s k 1 in
+        if string-same c c1 then k else iter (k + 1)
+    in
+    iter 0
+
+  let-rec make len c =
+    if len == 0 then ` ` else c ^ make (len - 1) c
+
+end
+
+
+module UFun = struct
+
+  let negate pred x = not (pred x)
+
+  let flip f x y = f y x
+
+end
+
+
+module UList = struct
+
+  let cons x xs = x :: xs
+
+  let-rec make n init =
+    if n == 0 then [] else init :: make (n - 1) init
+
+  let rev-concat lst =
+    lst |> List.reverse |> List.concat
+
+  let rev-append xs ys = List.fold-left (UFun.flip cons) ys xs
+
+end
 
 
 let is-digit     = string-match (regexp-of-string `[0-9]`)
