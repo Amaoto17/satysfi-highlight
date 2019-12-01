@@ -1,6 +1,5 @@
 @require: stdjabook
-@import: ../highlight
-@import: test-lang
+@import: re-test
 
 
 document (|
@@ -9,10 +8,5 @@ document (|
   show-title = false;
   show-toc = false;
 |) '<
-  +section{}<
-    +code?:(Test.rule)(```
-      abcccd
-      abcabcd
-    ```);
-  >
+  +test;
 >

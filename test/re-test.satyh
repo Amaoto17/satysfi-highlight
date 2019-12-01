@@ -1,0 +1,235 @@
+@require: pervasives
+@import: ../lib/regex
+
+open Parser
+
+
+module TestResult : sig
+
+  type t
+  val empty : t
+  val pass : t -> string -> t
+  val fail : t -> string -> t
+  val dump : context -> t -> inline-boxes
+
+end = struct
+
+  type t = pass list
+
+  and pass = Pass of string | Fail of string
+
+  let empty = []
+
+  let pass t msg = Pass msg :: t
+  let fail t msg = Fail msg :: t
+
+  let dump ctx t =
+    t |> List.reverse
+      |> List.fold-left (fun acc pass -> (
+        let s =
+          match pass with
+          | Pass msg -> `Passed: `# ^ msg
+          | Fail msg -> `Failed: `# ^ msg
+        in
+        acc ++ read-inline ctx (embed-string s) ++ mandatory-break ctx
+      )) inline-nil
+
+end
+
+
+let re-match pat str result =
+  let msg = `re-match `# ^ pat ^ #` `# ^ str in
+  let re = Regex.compile pat in
+  match parse re (Some regex-vm-init) str with
+  | Ok _    -> TestResult.pass result msg
+  | Error _ -> TestResult.fail result msg
+
+let re-unmatch pat str result =
+  let msg = `re-unmatch `# ^ pat ^ #` `# ^ str in
+  let re = Regex.compile pat in
+  match parse re (Some regex-vm-init) str with
+  | Ok    _ -> TestResult.fail result msg
+  | Error _ -> TestResult.pass result msg
+
+
+let suite = [
+  re-match `a` `a`;
+  re-unmatch `a` `b`;
+
+  re-match `ab` `ab`;
+  re-unmatch `ab` `ac`;
+
+  re-match `a|b` `a`;
+  re-match `a|b` `b`;
+  re-unmatch `a|b` `c`;
+
+  re-match ` ` ` `;
+
+  re-match `a*` `a`;
+  re-match `a*` `aa`;
+  re-match `a*` ` `;
+  re-match `a*` `b`;
+
+  re-match `a+` `a`;
+  re-match `a+` `aa`;
+  re-unmatch `a+` ` `;
+  re-unmatch `a+` `b`;
+
+  re-match `a{0}` ` `;
+  re-match `a{1}` `a`;
+  re-match `a{2}` `aa`;
+  re-unmatch `a{2}` `a`;
+  re-unmatch `a{2}b` `aaab`;
+
+  re-match `a{1,}b` `ab`;
+  re-match `a{1,}b` `aab`;
+  re-unmatch `a{1,}b` `b`;
+
+  re-match `a{,1}b` `b`;
+  re-match `a{,1}b` `ab`;
+  re-unmatch `a{,1}b` `aab`;
+
+  re-match `a{1,2}b` `ab`;
+  re-match `a{1,2}b` `aab`;
+  re-unmatch `a{1,2}b` `b`;
+  re-unmatch `a{1,2}b` `aaab`;
+
+  re-match `a?b` `ab`;
+  re-match `a?b` `b`;
+
+  re-match `a?^b` `b`;
+  re-unmatch `a?^b` `ab`;
+
+  re-match `a$` `a`;
+  re-unmatch `a$` `ab`;
+
+  re-match `a\b` `a,`;
+  re-match `,\ba` `,a`;
+  re-unmatch `a\b` `ab`;
+  re-unmatch `a\b` `a0`;
+  re-unmatch `a\b` `a_`;
+  re-unmatch `\ba` `ba`;
+
+  re-match `a\B` `ab`;
+  re-match `b\Ba` `ba`;
+  re-unmatch `a\B` `a,`;
+  re-unmatch `,\Ba` `,a`;
+
+  re-match `\w` `a`;
+  re-match `\w` `0`;
+  re-match `\w` `_`;
+  re-unmatch `\w` `!`;
+
+  re-match `\W` `!`;
+  re-unmatch `\W` `a`;
+  re-unmatch `\W` `0`;
+  re-unmatch `\W` `_`;
+
+  re-match `\d` `0`;
+  re-match `\d` `9`;
+  re-unmatch `\d` `a`;
+  re-unmatch `\d` `_`;
+
+  re-match `\D` `a`;
+  re-match `\D` `_`;
+  re-unmatch `\D` `0`;
+
+  re-match `\h` `0`;
+  re-match `\h` `a`;
+  re-match `\h` `f`;
+  re-match `\h` `A`;
+  re-match `\h` `F`;
+  re-unmatch `\h` `g`;
+  re-unmatch `\h` `_`;
+
+  re-match `\H` `g`;
+  re-match `\H` `_`;
+  re-unmatch `\H` `0`;
+  re-unmatch `\H` `a`;
+  re-unmatch `\H` `F`;
+
+  re-match `\s` #` `#;
+  re-unmatch `\s` `a`;
+  re-unmatch `\s` `0`;
+  re-unmatch `\s` `_`;
+
+  re-match `\S` `a`;
+  re-match `\S` `0`;
+  re-match `\S` `_`;
+  re-unmatch `\S` #` `#;
+
+  re-match `[a]` `a`;
+  re-match `[*]` `*`;
+  re-match `[.]` `.`;
+
+  re-match `[ab]` `a`;
+  re-match `[ab]` `b`;
+  re-unmatch `[ab]` `c`;
+
+  re-match `[a-c]` `a`;
+  re-match `[a-c]` `b`;
+  re-match `[a-c]` `c`;
+  re-unmatch `[a-c]` `d`;
+
+  re-match `[^a]` `b`;
+  re-unmatch `[^a]` `a`;
+
+  re-match `[a-c&&[^b]]` `a`;
+  re-match `[a-c&&[^b]]` `c`;
+  re-unmatch `[a-c&&[^b]]` `b`;
+
+  re-match `[\d]` `0`;
+  re-unmatch `[\d]` `a`;
+
+  re-match `.` `a`;
+  re-match `.` `x`;
+  re-match `.` `0`;
+  re-match `.` `_`;
+  re-match `.` `!`;
+
+  re-match `ab*c` `abbc`;
+  re-match `(ab)*c` `ababc`;
+  re-unmatch `ab*c` `ababc`;
+
+  re-match `(?=a).` `a`;
+  re-unmatch `(?=a).` `b`;
+
+  re-match `(?!a).` `b`;
+  re-unmatch `(?!a).` `a`;
+
+  re-match `.(?<=a)` `a`;
+  re-unmatch `.(?<=a)` `b`;
+
+  re-match `.(?<!a)` `b`;
+  re-unmatch `.(?<!a)` `a`;
+
+  re-match `(ab)\1` `abab`;
+  re-unmatch `(ab)\1` `abac`;
+  re-match `(a)(bc)\1` `abca`;
+  re-match `(a)(bc)\2` `abcbc`;
+  re-unmatch `(a)(bc)\3` `abc`;
+  re-match `(?:a)(bc)\1` `abcbc`;
+
+  re-match `.*b` `aab`;
+  re-unmatch `.*+b` `aab`;
+
+  re-match `a(.*)a` `abcda`;
+  re-unmatch `a(?>.*)a` `abcda`;
+]
+
+let-block ctx +test =
+  let ctx =
+    ctx |> set-font Latin (`lmmono`, 1., 0.)
+        |> set-hyphen-penalty 100000
+  in
+  let fontsize = get-font-size ctx in
+  let charwid = get-natural-width (read-inline ctx {0}) in
+  let ctx =
+    ctx |> set-space-ratio (charwid /' fontsize) 0. 0.
+  in
+  let log =
+    suite |> List.fold-left (fun acc test -> test acc) TestResult.empty
+          |> TestResult.dump ctx
+  in
+  line-break true true ctx log
+
