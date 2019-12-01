@@ -42,10 +42,38 @@ end = struct
   and rule = (submatch list * continuation) parser
 
 
+  let-mutable cache <- fun _ -> None
+
+  let add-cache str re =
+    let f =
+      let g = !cache in
+      fun s -> (if string-same s str then Some re else g s)
+    in
+    cache <- f
+
+  let find-cache str =
+    let g = !cache in g str
+
   let fix = Parser.fix
 
+  % let pattern pat =
+  %   let () = display-message `compile ...` in
+  %   let re = Regex.compile pat in
+  %   attempt re >>= (fun matched -> (
+  %     let submatches = matched |> List.map (fun data -> (data, Empty)) in
+  %     return (submatches, Done)
+  %   ))
+
   let pattern pat =
-    let re = Regex.compile pat in
+    let re =
+      match find-cache pat with
+      | Some re -> re
+      | None ->
+          % let () = display-message `compiling ...` in
+          let re = Regex.compile pat in
+          let () = add-cache pat re in
+          re
+    in
     attempt re >>= (fun matched -> (
       let submatches = matched |> List.map (fun data -> (data, Empty)) in
       return (submatches, Done)

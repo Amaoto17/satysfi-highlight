@@ -22,11 +22,11 @@ end = struct
   let scheme decoset txtcolor ctx ruleopt code =
     let pads-code = (0pt, 0pt, 8pt, 8pt) in
     block-frame-breakable ctx pads-code decoset (fun ctx -> (
-      let fontsize = get-font-size ctx in
       let ctx =
         ctx |> set-code-font
             |> set-text-color txtcolor
       in
+      let fontsize = get-font-size ctx in
       let charwid = get-natural-width (read-inline ctx {0}) in
       let ctx-code =
         ctx |> set-space-ratio (charwid /' fontsize) 0. 0.
