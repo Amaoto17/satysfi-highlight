@@ -401,33 +401,37 @@ end = struct
       else expected `beginning of input`
     ))
 
+  let prev-is-word src pos =
+    if pos == 0 then false
+    else
+      let c = string-sub src (pos - 1) 1 in
+      is-word-char c
+
+  let next-is-word src pos =
+    if pos == string-length src then false
+    else
+      let c = string-sub src pos 1 in
+      is-word-char c
+
   let word-boundary =
     get >>= (fun st -> (
       let src = Stream.source st in
-      let curpos = Stream.position st in
-      let prev-is-word =
-        if curpos == 0 then false
-        else
-          let c = string-sub src (curpos - 1) 1 in
-          is-word-char c
-      in
-      let next-is-word =
-        if curpos == string-length src then false
-        else
-          let c = string-sub src curpos 1 in
-          is-word-char c
-      in
-      let xor l1 l2 = l1 && (not l2) || (not l1) && l2 in
-      if xor prev-is-word next-is-word then return ()
+      let pos = Stream.position st in
+      let prev = prev-is-word src pos in
+      let next = next-is-word src pos in
+      if (not prev) && next || prev && (not next) then return ()
       else expected `word boundary`
     ))
 
   let non-word-boundary =
-    not-followed-by word-boundary <?> `non-word boundary`
-
-  % let-rec many p = many1 p <|> return []
-
-  % and many1 p = p >>= (fun x -> (many p >>= (fun xs -> return (x :: xs))))
+    get >>= (fun st -> (
+      let src = Stream.source st in
+      let pos = Stream.position st in
+      let prev = prev-is-word src pos in
+      let next = next-is-word src pos in
+      if prev && next || (not prev) && (not next) then return ()
+      else expected `non-word boundary`
+    ))
 
   let choice ps = List.fold-left (<|>) empty ps
 
