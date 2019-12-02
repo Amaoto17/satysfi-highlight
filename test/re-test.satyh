@@ -53,56 +53,70 @@ let re-unmatch pat str result =
 
 
 let suite = [
+  % single character
   re-match `a` `a`;
   re-unmatch `a` `b`;
 
+  % concatenation
   re-match `ab` `ab`;
   re-unmatch `ab` `ac`;
 
+  % alternation
   re-match `a|b` `a`;
   re-match `a|b` `b`;
   re-unmatch `a|b` `c`;
 
+  % empty
   re-match ` ` ` `;
 
+  % 0 or more (greedy)
   re-match `a*` `a`;
   re-match `a*` `aa`;
   re-match `a*` ` `;
   re-match `a*` `b`;
 
+  % 1 or more (greedy)
   re-match `a+` `a`;
   re-match `a+` `aa`;
   re-unmatch `a+` ` `;
   re-unmatch `a+` `b`;
 
+  % exactly n
   re-match `a{0}` ` `;
   re-match `a{1}` `a`;
   re-match `a{2}` `aa`;
   re-unmatch `a{2}` `a`;
   re-unmatch `a{2}b` `aaab`;
 
+  % n or more (greedy)
   re-match `a{1,}b` `ab`;
   re-match `a{1,}b` `aab`;
   re-unmatch `a{1,}b` `b`;
 
+  % at most n (greedy)
   re-match `a{,1}b` `b`;
   re-match `a{,1}b` `ab`;
   re-unmatch `a{,1}b` `aab`;
 
+  % between m and n
   re-match `a{1,2}b` `ab`;
   re-match `a{1,2}b` `aab`;
   re-unmatch `a{1,2}b` `b`;
   re-unmatch `a{1,2}b` `aaab`;
 
+  % 0 or 1 (greedy)
   re-match `a?b` `ab`;
   re-match `a?b` `b`;
 
+  % start of string
   re-match `a?^b` `b`;
   re-unmatch `a?^b` `ab`;
 
+  % end of string
   re-match `a$` `a`;
   re-unmatch `a$` `ab`;
 
+  % word boundary
   re-match `a\b` `a,`;
   re-match `,\ba` `,a`;
   re-unmatch `a\b` `ab`;
@@ -110,30 +124,36 @@ let suite = [
   re-unmatch `a\b` `a_`;
   re-unmatch `\ba` `ba`;
 
+  % non-word boundary
   re-match `a\B` `ab`;
   re-match `b\Ba` `ba`;
   re-unmatch `a\B` `a,`;
   re-unmatch `,\Ba` `,a`;
 
+  % word character
   re-match `\w` `a`;
   re-match `\w` `0`;
   re-match `\w` `_`;
   re-unmatch `\w` `!`;
 
+  % non-word character
   re-match `\W` `!`;
   re-unmatch `\W` `a`;
   re-unmatch `\W` `0`;
   re-unmatch `\W` `_`;
 
+  % digit
   re-match `\d` `0`;
   re-match `\d` `9`;
   re-unmatch `\d` `a`;
   re-unmatch `\d` `_`;
 
+  % non-digit
   re-match `\D` `a`;
   re-match `\D` `_`;
   re-unmatch `\D` `0`;
 
+  % hexdigit
   re-match `\h` `0`;
   re-match `\h` `a`;
   re-match `\h` `f`;
@@ -142,67 +162,83 @@ let suite = [
   re-unmatch `\h` `g`;
   re-unmatch `\h` `_`;
 
+  % non-hexdigit
   re-match `\H` `g`;
   re-match `\H` `_`;
   re-unmatch `\H` `0`;
   re-unmatch `\H` `a`;
   re-unmatch `\H` `F`;
 
+  % whitespace
   re-match `\s` #` `#;
   re-unmatch `\s` `a`;
   re-unmatch `\s` `0`;
   re-unmatch `\s` `_`;
 
+  % non-whitespace
   re-match `\S` `a`;
   re-match `\S` `0`;
   re-match `\S` `_`;
   re-unmatch `\S` #` `#;
 
+  % character class (simple)
   re-match `[a]` `a`;
   re-match `[*]` `*`;
   re-match `[.]` `.`;
 
+  % character class (union)
   re-match `[ab]` `a`;
   re-match `[ab]` `b`;
   re-unmatch `[ab]` `c`;
 
+  % character class (range)
   re-match `[a-c]` `a`;
   re-match `[a-c]` `b`;
   re-match `[a-c]` `c`;
   re-unmatch `[a-c]` `d`;
 
+  % character class (complement)
   re-match `[^a]` `b`;
   re-unmatch `[^a]` `a`;
 
+  % character class (intersection)
   re-match `[a-c&&[^b]]` `a`;
   re-match `[a-c&&[^b]]` `c`;
   re-unmatch `[a-c&&[^b]]` `b`;
 
+  % shorthand in character class
   re-match `[\d]` `0`;
   re-unmatch `[\d]` `a`;
 
+  % any single character
   re-match `.` `a`;
   re-match `.` `x`;
   re-match `.` `0`;
   re-match `.` `_`;
   re-match `.` `!`;
 
+  % group
   re-match `ab*c` `abbc`;
   re-match `(ab)*c` `ababc`;
   re-unmatch `ab*c` `ababc`;
 
+  % positive lookahead
   re-match `(?=a).` `a`;
   re-unmatch `(?=a).` `b`;
 
+  % negative lookahead
   re-match `(?!a).` `b`;
   re-unmatch `(?!a).` `a`;
 
+  % positive lookbehind
   re-match `.(?<=a)` `a`;
   re-unmatch `.(?<=a)` `b`;
 
+  % negative lookbehind
   re-match `.(?<!a)` `b`;
   re-unmatch `.(?<!a)` `a`;
 
+  % back reference
   re-match `(ab)\1` `abab`;
   re-unmatch `(ab)\1` `abac`;
   re-match `(a)(bc)\1` `abca`;
@@ -210,9 +246,11 @@ let suite = [
   re-unmatch `(a)(bc)\3` `abc`;
   re-match `(?:a)(bc)\1` `abcbc`;
 
+  % possessive quantifier
   re-match `.*b` `aab`;
   re-unmatch `.*+b` `aab`;
 
+  % atomic group
   re-match `a(.*)a` `abcda`;
   re-unmatch `a(?>.*)a` `abcda`;
 ]
