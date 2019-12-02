@@ -9,6 +9,7 @@ module ColorScheme: sig
 
 end = struct
 
+  let black  = Color.gray 0.18
   let red    = Color.rgb 0.62 0.00 0.17
   let green  = Color.rgb 0.32 0.52 0.09
   let blue   = Color.rgb 0.11 0.53 0.68
@@ -16,20 +17,27 @@ end = struct
   let gray   = Color.rgb 0.48 0.48 0.48
   let orange = Color.rgb 0.85 0.46 0.06
 
-  let foreground = Color.gray 0.18
+  let foreground = black
 
   let color-of style =
     match style with
     | Comment           -> gray
+    | LineComment       -> gray
+    | BlockComment      -> gray
+    | Documentation     -> gray
     | Constant          -> blue
-    | BooleanConstant   -> blue
-    | CharacterConstant -> blue
     | NumericConstant   -> green
-    | String            -> green
+    | CharacterConstant -> blue
+    | ReservedConstant  -> blue
     | FunctionName      -> yellow
     | TypeName          -> orange
+    | StorageModifier   -> orange
     | Keyword           -> red
+    | ControlKeyword    -> red
     | Operator          -> red
+    | Directive         -> red
+    | String            -> green
+    | Regexp            -> red
     | _                 -> foreground
 
 end

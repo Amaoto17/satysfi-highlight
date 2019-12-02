@@ -1,16 +1,30 @@
 type style =
-  | Array
-  | List
+% comments
   | Comment
+  | LineComment
+  | BlockComment
+  | Documentation
+% constants
   | Constant
-  | BooleanConstant
-  | CharacterConstant
   | NumericConstant
-  | String
+  | CharacterConstant
+  | ReservedConstant
+% entities
   | FunctionName
   | TypeName
+  | ClassName
   | ModuleName
-  | VariableName
-  | ExceptionName
+% storage modifiers
+  | StorageModifier
+% keywords
   | Keyword
+  | ControlKeyword
   | Operator
+  | Directive
+% string
+  | String
+  | Regexp
+% variables
+  | Variable
+  | Parameter
+  | ReservedVariable

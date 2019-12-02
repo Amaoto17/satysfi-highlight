@@ -15,7 +15,7 @@ end = struct
       pattern-block (|
         enter = pattern `\[\|`
       ; leave = pattern `\|\]`
-      ; style = Some (Array)
+      ; style = None
       ; inner = [rule-array; self]
       |)
     ))
@@ -25,7 +25,7 @@ end = struct
       pattern-block (|
         enter = pattern `\(\*`
       ; leave = pattern `\*\)`
-      ; style = Some (Comment)
+      ; style = Some (BlockComment)
       ; inner = [rule-comment]
       |)
     ))
@@ -50,7 +50,7 @@ end = struct
     let rule-constant =
       patterns [
         pattern `\b(true|false)\b`
-          |> capture 0 (style BooleanConstant)
+          |> capture 0 (style ReservedConstant)
       ; rule-float
           |> capture 0 (style NumericConstant)
       ; rule-integer
@@ -84,7 +84,7 @@ end = struct
       pattern-block (|
         enter = pattern `\[(?!\|)`
       ; leave = pattern `(?<!\|)\]`
-      ; style = Some (List)
+      ; style = None
       ; inner = [rule-list; self]
       |)
     ))
@@ -121,7 +121,7 @@ end = struct
         rule-constant
       ; pattern `(~)([a-z][\w']*)(\s*:\s*)?`
           |> capture 1 (style Keyword)
-          |> capture 2 (style VariableName)
+          |> capture 2 (style Variable)
       ; pattern-block (|
           enter =
             pattern `(\?)(\([a-z][\w']*)\s*(=)`
@@ -243,7 +243,7 @@ end = struct
             |> capture 2 (style Operator)
       ; leave =
           pattern `->|\b(when)\b|\s*(?=\|)`
-            |> capture 1 (style Keyword)
+            |> capture 1 (style ControlKeyword)
       ; style = None
       ; inner = [
           rule-comment
@@ -285,7 +285,7 @@ end = struct
     let rule-exception =
       pattern `\b(exception)\s+([A-Z][\w']*)(?:\s+(of))?\b`
         |> capture 1 (style Keyword)
-        |> capture 2 (style ExceptionName)
+        |> capture 2 (style Constant)
         |> capture 3 (style Keyword)
     in
 
@@ -311,14 +311,14 @@ end = struct
       pattern-block (|
         enter =
           pattern `\b(while|for)\b`
-            |> capture 0 (style Keyword)
+            |> capture 0 (style ControlKeyword)
       ; leave =
           pattern `\b(done)\b`
-            |> capture 0 (style Keyword)
+            |> capture 0 (style ControlKeyword)
       ; style = None
       ; inner = [
           pattern `\b(do)\b`
-            |> capture 0 (style Keyword)
+            |> capture 0 (style ControlKeyword)
         ; self
         ]
       |)
@@ -337,7 +337,7 @@ end = struct
     let rule-keywords =
       patterns [
         pattern `\b(downto|if|else|match|then|to|when|with|try)\b`
-          |> capture 0 (style Keyword)
+          |> capture 0 (style ControlKeyword)
       ; pattern `\b(as|assert|class|constraint|exception|external|functor|in|include|inherit|initializer|lazy|let|module|mutable|new|object|open|private|rec|sig|struct|type|virtual)\b`
           |> capture 0 (style Keyword)
       ]

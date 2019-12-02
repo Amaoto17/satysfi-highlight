@@ -114,9 +114,7 @@ end = struct
 
   let position err = err#err-pos
 
-  let set-position err pos = (|
-    err with err-pos = pos;
-  |)
+  let set-position err pos = (| err with err-pos = pos |)
 
   let format t =
     let-rec iter (unexp, exp, prob) messages =
