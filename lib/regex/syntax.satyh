@@ -60,76 +60,76 @@ end = struct
 
   let item = none-of class-meta-char
 
-  let-rec escaped = fun st -> st |> (
-    char `\` >>
-    choice [
-      control-char >>= (fun c -> (
-        return (Single c)
-      ))
-    ; shorthand >>= (fun pred -> (
-        return (Shorthand pred)
-      ))
-    ; any >>= (fun c -> (
-        return (Single c)
-      ))
-    ]
-  )
-
-  and range c1 =
-    char `-` >>
-    choice [
-      item >>= (fun c2 -> (
-        return (Range (c1, c2))
-      ))
-    ; return (Single `-`)
-    ]
-
-  and primary = fun st -> st |> (
-    choice [
-      char `[` >>
-      class >>= (fun t -> (
-        return (Class t)
-      ))
-    ; escaped
-    ; item >>= (fun c -> (
-        (range c) <|> return (Single c)
-      ))
-    ]
-  )
-
-  and enum = fun st -> st |> (
-    let enum-op =
-      return (fun t1 t2 -> Union (t1, t2))
+  let class = fix (fun class -> (
+    let escaped =
+      char `\` >>
+      choice [
+        control-char >>= (fun c -> (
+          return (Single c)
+        ))
+      ; shorthand >>= (fun pred -> (
+          return (Shorthand pred)
+        ))
+      ; any >>= (fun c -> (
+          return (Single c)
+        ))
+      ]
     in
-    chainl primary enum-op
-  )
 
-  and prod = fun st -> st |> (
-    let prod-op =
-      string `&&` >>
-      return (fun t1 t2 -> Prod (t1, t2))
+    let range c1 =
+      char `-` >>
+      choice [
+        item >>= (fun c2 -> (
+          return (Range (c1, c2))
+        ))
+      ; return (Single `-`)
+      ]
     in
-    chainl enum prod-op
-  )
 
-  and compl = fun st -> st |> (
-    opt-with (fun t -> t) (
-      char `^` >> return (fun t -> Not t)
-    ) >>= (fun f -> (
-      prod >>= (fun t -> (
-        return (f t)
+    let primary =
+      choice [
+        char `[` >>
+        class >>= (fun t -> (
+          return (Class t)
+        ))
+      ; escaped
+      ; item >>= (fun c -> (
+          (range c) <|> return (Single c)
+        ))
+      ]
+    in
+
+    let enum =
+      let enum-op =
+        return (fun t1 t2 -> Union (t1, t2))
+      in
+      chainl primary enum-op
+    in
+
+    let prod =
+      let prod-op =
+        string `&&` >>
+        return (fun t1 t2 -> Prod (t1, t2))
+      in
+      chainl enum prod-op
+    in
+
+    let compl =
+      opt-with (fun t -> t) (
+        char `^` >> return (fun t -> Not t)
+      ) >>= (fun f -> (
+        prod >>= (fun t -> (
+          return (f t)
+        ))
       ))
-    ))
-  )
+    in
 
-  and class = fun st -> st |> (
     compl << char `]`
-  )
+  ))
 
-  and parse = fun st -> st |> (
+  let parse =
     char `[` >>
     class >>= build
-  )
 
 end
 
@@ -215,114 +215,118 @@ end = struct
     | None -> problem `look behind is allowed only for fixed-length pattern`
     | Some len -> return len
 
-  let-rec paren = fun st -> st |> (
-    char `(` >>
-    choice [
-      char `?` >>
-        choice [
-          char `=` >>
-          alt >>= (fun t -> (
-            return (LookAhead t)
-          ))
-        ; char `!` >>
-          alt >>= (fun t -> (
-            return (NegLookAhead t)
-          ))
-        ; char `<` >>
+  let expr = fix (fun expr -> (
+    let paren =
+      char `(` >>
+      choice [
+        char `?` >>
           choice [
             char `=` >>
-            alt >>= (fun t -> (
-              check-fixed-length t >>= (fun len -> (
-                return (LookBehind (len, t))
-              ))
+            expr >>= (fun t -> (
+              return (LookAhead t)
             ))
           ; char `!` >>
-            alt >>= (fun t -> (
-              check-fixed-length t >>= (fun len -> (
-                return (NegLookBehind (len, t))
+            expr >>= (fun t -> (
+              return (NegLookAhead t)
+            ))
+          ; char `<` >>
+            choice [
+              char `=` >>
+              expr >>= (fun t -> (
+                check-fixed-length t >>= (fun len -> (
+                  return (LookBehind (len, t))
+                ))
               ))
+            ; char `!` >>
+              expr >>= (fun t -> (
+                check-fixed-length t >>= (fun len -> (
+                  return (NegLookBehind (len, t))
+                ))
+              ))
+            ]
+          ; char `>` >>
+            expr >>= (fun t -> (
+              return (Atomic t)
             ))
+          ; char `:` >> expr
           ]
-        ; char `>` >>
-          alt >>= (fun t -> (
-            return (Atomic t)
-          ))
-        ; char `:` >> alt
-        ]
-    ; alt >>= (fun t -> (
-        return (Group (-1, t))
-      ))
-    ] << char `)`
-  )
-
-  and primary = fun st -> st |> (
-    choice [
-      paren
-    ; char-class
-    ; backslash
-    ; char `.` >> return Any
-    ; single-anchor
-    ; item >>= (fun c -> return (Char c))
-    ]
-  )
-
-  and rep-times t =
-    char `{` >>
-    choice [
-      char `,` >>
-      decimal >>= (fun n -> (
-        return (AtMost n)
-      ))
-    ; decimal >>= (fun m -> (
-        choice [
-          char `,` >>
-          choice [
-            decimal >>= (fun n -> (
-              return (Between (m, n))
-            ))
-          ; return (AtLeast m)
-          ]
-        ; return (Just m)
-        ]
-      ))
-    ] << char `}`
-
-  and quantifier builder =
-    choice [
-      char `?` >> return (builder Reluctant)
-    ; char `+` >> return (builder Possessive)
-    ; return (builder Greedy)
-    ]
-
-  and rep = fun st -> st |> (
-    primary >>= (fun t ->(
-      choice [
-        char `?` >> quantifier (fun q -> Opt (q, t))
-      ; char `*` >> quantifier (fun q -> Many (q, t))
-      ; char `+` >> quantifier (fun q -> Many1 (q, t))
-      ; rep-times t >>= (fun kind -> (
-          quantifier (fun q -> Repeat (kind, q, t))
+      ; expr >>= (fun t -> (
+          return (Group (-1, t))
         ))
-      ; return t
-      ]
-    ))
-  )
-
-  and seq = fun st -> st |> (
-    many rep >>= (fun ts -> (
-      return (Concat ts)
-    ))
-  )
-
-  and alt = fun st -> st |> (
-    let alt-op =
-      char `|` >> return (fun t1 t2 -> Alt (t1, t2))
+      ] << char `)`
     in
-    chainl seq alt-op
-  )
 
-  and re = fun st -> st |> (
-    alt << eof
-  )
+    let primary =
+      choice [
+        paren
+      ; char-class
+      ; backslash
+      ; char `.` >> return Any
+      ; single-anchor
+      ; item >>= (fun c -> return (Char c))
+      ]
+    in
+
+    let rep-times t =
+      char `{` >>
+      choice [
+        char `,` >>
+        decimal >>= (fun n -> (
+          return (AtMost n)
+        ))
+      ; decimal >>= (fun m -> (
+          choice [
+            char `,` >>
+            choice [
+              decimal >>= (fun n -> (
+                return (Between (m, n))
+              ))
+            ; return (AtLeast m)
+            ]
+          ; return (Just m)
+          ]
+        ))
+      ] << char `}`
+    in
+
+    let quantifier builder =
+      choice [
+        char `?` >> return (builder Reluctant)
+      ; char `+` >> return (builder Possessive)
+      ; return (builder Greedy)
+      ]
+    in
+
+    let rep =
+      primary >>= (fun t ->(
+        choice [
+          char `?` >> quantifier (fun q -> Opt (q, t))
+        ; char `*` >> quantifier (fun q -> Many (q, t))
+        ; char `+` >> quantifier (fun q -> Many1 (q, t))
+        ; rep-times t >>= (fun kind -> (
+            quantifier (fun q -> Repeat (kind, q, t))
+          ))
+        ; return t
+        ]
+      ))
+    in
+
+    let seq =
+      many rep >>= (fun ts -> (
+        return (Concat ts)
+      ))
+    in
+
+    let alt =
+      let alt-op =
+        char `|` >> return (fun t1 t2 -> Alt (t1, t2))
+      in
+      chainl seq alt-op
+    in
+
+    alt
+  ))
+
+  let re = expr << eof
 
 end
