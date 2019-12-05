@@ -1,5 +1,5 @@
 @require: pervasives
-@import: ../lib/regex
+@import: ../highlight/lib/regex
 
 open Parser
 

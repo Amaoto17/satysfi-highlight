@@ -1,6 +1,6 @@
 @require: stdjabook
-@import: highlight
-@import: lang/ocaml
+@import: highlight/code
+@import: highlight/lang/ocaml
 
 
 document (|
