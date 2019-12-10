@@ -79,7 +79,7 @@ end = struct
 
   let keywords lst =
     let keyword-parsers = List.map (fun s -> string s >> word-boundary) lst in
-    let ctx = (| regex-vm-init with matched = [None] |) in
+    let ctx = (| regex-st-init with matched = [None] |) in
     put-state ctx >>
     push-current-pos >>
     word-boundary >>
@@ -148,7 +148,7 @@ end = struct
           | Between (m, n) -> skip-count m p >> skip-count (n - m) (walk (Opt (q, t)) cont)
         )
     in
-    let ctx = (| regex-vm-init with matched = UList.make (n-group + 1) None |) in
+    let ctx = (| regex-st-init with matched = UList.make (n-group + 1) None |) in
     put-state ctx >>
     push-current-pos >>
     walk ast (capture 0) >>

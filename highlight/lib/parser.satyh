@@ -12,20 +12,20 @@ module Stream : sig
 
   type t
 
-  val create : regex-vm option -> string -> t
+  val create : regex-st option -> string -> t
   val position : t -> int
   val set-position : t -> int -> t
   val uncons : t -> int -> (string * t) option
   val source : t -> string
-  val get-custom : t -> regex-vm option
-  val set-custom : t -> regex-vm option -> t
+  val get-custom : t -> regex-st option
+  val set-custom : t -> regex-st option -> t
 
 end = struct
 
   type t = (|
     source : string;
     offset : int;
-    custom : regex-vm option;
+    custom : regex-st option;
   |)
 
   
@@ -160,7 +160,7 @@ type 'a parser = Stream.t -> 'a parse-result
 module Parser : sig
 
   val run : 'a parser -> Stream.t -> 'a parse-result
-  val parse : 'a parser -> regex-vm option -> string -> 'a Error.t result
+  val parse : 'a parser -> regex-st option -> string -> 'a Error.t result
   val debug : string -> unit parser
   val return : 'a -> 'a parser
   val (>>=) : 'a parser -> ('a -> 'b parser) -> 'b parser
@@ -168,8 +168,8 @@ module Parser : sig
   val (<<) : 'a parser -> 'b parser -> 'a parser
   val get : Stream.t parser
   val put : Stream.t -> unit parser
-  val get-state : regex-vm parser
-  val put-state : regex-vm -> unit parser
+  val get-state : regex-st parser
+  val put-state : regex-st -> unit parser
   val position : int parser
   val set-position : int -> unit parser
   val unexpected : string -> 'a parser

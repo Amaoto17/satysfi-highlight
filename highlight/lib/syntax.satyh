@@ -149,10 +149,6 @@ end = struct
   let captures lst p =
     List.fold-left (fun p (n, f) -> capture n f p) p lst
 
-  % let style sty submatch =
-  %   let (data, color-ctx) = submatch in
-  %   (data, Simple (ColorScheme.color-of sty))
-
   let style sty submatch =
     submatch |> Option.map (fun (bpos, epos, s, _) ->
       (bpos, epos, s, Simple (ColorScheme.color-of sty)))
@@ -175,7 +171,7 @@ end = struct
   %   match data with
   %   | None -> submatch
   %   | Some (bpos, epos, s) -> (
-  %       match parse p (Some regex-vm-init) s with
+  %       match parse p (Some regex-st-init) s with
   %       | Error _ -> submatch
   %       | Ok submatches -> (data, Nested submatches)
   %     )
@@ -275,7 +271,7 @@ end = struct
         ]
       ) in iter [] stack-init
     in
-    match parse p-line (Some regex-vm-init) code with
+    match parse p-line (Some regex-st-init) code with
     | Error _ ->
         (read-inline ctx (embed-string code), stack-init)
     | Ok (submatches, stack) -> (

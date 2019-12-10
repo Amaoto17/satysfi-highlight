@@ -5,12 +5,12 @@ type color-ctx =
 
 and match-data = (int * int * string * color-ctx) option
 
-type regex-vm = (|
+type regex-st = (|
   pos-stack : int list;
   matched   : match-data list;
 |)
 
-let regex-vm-init = (|
+let regex-st-init = (|
   pos-stack = [];
   matched   = [];
 |)
