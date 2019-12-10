@@ -14,4 +14,4 @@ SATySFiでコードブロックのシンタックスハイライトを行うパ�
 
 ## 使用方法
 
-Advent Calendarに書いた記事
+<a href="https://amaoto017.hatenablog.com/entry/2019/12/11/005715">SATySFi Advent Calendar 2019内で書いた記事</a>を参照してください。
