@@ -137,7 +137,7 @@ end = struct
     iter 0 lst
 
   let keywords lst =
-    attempt (Regex.keywords lst) >>= (fun submatches -> (
+    Regex.keywords lst >>= (fun submatches -> (
       return (submatches, Done)
     ))
 

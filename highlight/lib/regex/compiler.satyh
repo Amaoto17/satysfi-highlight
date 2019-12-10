@@ -78,12 +78,15 @@ end = struct
   let terminal = return ()
 
   let keywords lst =
-    let keyword-parsers = List.map (fun s -> string s >> word-boundary) lst in
-    let ctx = (| regex-st-init with matched = [None] |) in
-    put-state ctx >>
+    let keyword-parsers =
+      let f s = attempt (string s >> word-boundary) in
+      List.map f lst
+    in
+    put-state (| regex-st-init with matched = [None] |) >>
     push-current-pos >>
     word-boundary >>
     choice keyword-parsers >>
+    capture 0 >>
     get-all-match
 
   let build n-group ast =

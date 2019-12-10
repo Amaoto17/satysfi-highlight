@@ -49,7 +49,7 @@ end = struct
 
     let rule-constant =
       patterns [
-        pattern `\b(true|false)\b`
+        keywords [`true`; `false`]
           |> capture 0 (style ReservedConstant)
       ; rule-float
           |> capture 0 (style NumericConstant)
@@ -92,7 +92,10 @@ end = struct
 
     let rule-typename =
       patterns [
-        pattern `\b(int|char|float|string|list|array|bool|unit|exn|option|result|int32|int64|nativeint)\b`
+        keywords [
+          `int`; `char`; `float`; `string`; `list`; `array`;
+          `bool`; `unit`; `exn`; `option`; `result`; `int32`; `nativeint`
+        ]
           |> capture 0 (style TypeName)
       ]
     in
@@ -100,7 +103,7 @@ end = struct
     let rule-typedef = fix (fun rule-typedef -> (
       patterns [
         rule-typename
-      ; pattern `\bof\b`
+      ; keywords [`of`]
           |> capture 0 (style Keyword)
       ; pattern `[a-z_']\w*\b`
           |> capture 0 (style TypeName)
@@ -132,7 +135,7 @@ end = struct
         ; inner = [self]
         |)
       ; rule-typename
-      ; pattern `\bas\b`
+      ; keywords [`as`]
           |> capture 0 (style Keyword)
       ]
     ))
@@ -187,13 +190,13 @@ end = struct
       |)
     in
 
-    let rule-group =
+    let rule-block =
       pattern-block (|
         enter =
-          pattern `\b(struct|sig|begin)\b`
+          keywords [`begin`; `module`; `sig`]
             |> capture 1 (style Keyword)
       ; leave =
-          pattern `\bend\b`
+          keywords [`end`]
             |> capture 0 (style Keyword)
       ; style = None
       ; inner = [self]
@@ -265,7 +268,7 @@ end = struct
           ; leave = pattern `;|(?=\})`
           ; style = None
           ; inner = [
-              pattern `\bwith\b`
+              keywords [`with`]
                 |> capture 0 (style Keyword)
             ; rule-typedef
             ]
@@ -291,7 +294,7 @@ end = struct
 
     let rule-operator =
       patterns [
-        pattern `\b(mod|land|lor|lxor|lsl|lsr|asr|or)\b`
+        keywords [`mod`; `land`; `lor`; `lxor`; `lsl`; `lsr`; `asr`; `or`]
           |> capture 0 (style Operator)
       ; pattern `->`
       ; pattern `:=`
@@ -310,14 +313,14 @@ end = struct
     let rule-loop =
       pattern-block (|
         enter =
-          pattern `\b(while|for)\b`
+          keywords [`while`; `for`]
             |> capture 0 (style ControlKeyword)
       ; leave =
-          pattern `\b(done)\b`
+          keywords [`done`]
             |> capture 0 (style ControlKeyword)
       ; style = None
       ; inner = [
-          pattern `\b(do)\b`
+          keywords [`do`]
             |> capture 0 (style ControlKeyword)
         ; self
         ]
@@ -336,9 +339,17 @@ end = struct
 
     let rule-keywords =
       patterns [
-        pattern `\b(downto|if|else|match|then|to|when|with|try)\b`
+        keywords [
+          `downto`; `if`; `else`; `match`; `then`; `to`;
+          `when`; `with`; `try`
+        ]
           |> capture 0 (style ControlKeyword)
-      ; pattern `\b(as|assert|class|constraint|exception|external|functor|in|include|inherit|initializer|lazy|let|module|mutable|new|object|open|private|rec|sig|struct|type|virtual)\b`
+      ; keywords [
+          `as`; `assert`; `class`; `constraint`; `exception`; `external`;
+          `functor`; `in`; `include`; `inherit`; `initializer`; `lazy`;
+          `let`; `module`; `mutable`; `new`; `object`; `open`;
+          `private`; `rec`; `sig`; `struct`; `type`; `virtual`
+        ]
           |> capture 0 (style Keyword)
       ]
     in
@@ -350,7 +361,7 @@ end = struct
     ; rule-module-open-binding
     ; rule-let-function
     ; rule-anonymous-fun
-    ; rule-group
+    ; rule-block
     ; rule-module
     ; rule-module-type
     ; rule-type-definition
