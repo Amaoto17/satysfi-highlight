@@ -8,8 +8,8 @@ open Parser
 
 module Syntax : sig
 
-  type submatch
   type rule
+  type decorator
 
   val fix : (rule -> rule) -> rule
   val pattern : string -> rule
@@ -21,9 +21,11 @@ module Syntax : sig
       style : style option;
       inner : rule list;
     |)
-  val capture : int -> (submatch -> submatch) -> rule -> rule
-  val style : style -> submatch -> submatch
-  val include : rule -> submatch -> submatch
+  val keywords : string list -> rule
+  val capture : int -> decorator -> rule -> rule
+  val captures : (int * decorator) list -> rule -> rule
+  val style : style -> decorator
+  val include : rule -> decorator
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
 end = struct
@@ -40,6 +42,8 @@ end = struct
     | Continue of rule list
 
   and rule = (submatch list * continuation) parser
+
+  type decorator = submatch -> submatch
 
 
   let-mutable cache <- fun _ -> None
@@ -147,10 +151,19 @@ end = struct
     in
     iter 0 lst
 
+  let keywords lst =
+    Regex.keywords lst >>= (fun matched -> (
+      let submatches = matched |> List.map (fun data -> (data, Empty)) in
+      return (submatches, Done)
+    ))
+
   let capture n f p =
     p >>= (fun (submatches, k) -> (
       return (list-nth-map n f submatches, k)
     ))
+
+  let captures lst p =
+    List.fold-left (fun p (n, f) -> capture n f p) p lst
 
   let style sty submatch =
     let (data, color-ctx) = submatch in

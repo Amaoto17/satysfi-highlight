@@ -7,10 +7,12 @@ open Parser
 
 module Regex : sig
 
+  val keywords : string list -> (match-data list) parser
   val compile : string -> (match-data list) parser
 
 end = struct
 
+  let keywords = Compiler.keywords
   let compile = Compiler.compile
 
 end

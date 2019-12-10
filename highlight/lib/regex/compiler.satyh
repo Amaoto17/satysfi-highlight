@@ -9,6 +9,7 @@ open Parser
 
 module Compiler : sig
 
+  val keywords : string list -> (match-data list) parser
   val compile : string -> (match-data list) parser
 
 end = struct
@@ -75,6 +76,15 @@ end = struct
     ))
 
   let terminal = return ()
+
+  let keywords lst =
+    let keyword-parsers = List.map (fun s -> string s >> word-boundary) lst in
+    let ctx = (| regex-vm-init with matched = [None] |) in
+    put-state ctx >>
+    push-current-pos >>
+    word-boundary >>
+    choice keyword-parsers >>
+    get-all-match
 
   let build n-group ast =
     let-rec walk node cont =
