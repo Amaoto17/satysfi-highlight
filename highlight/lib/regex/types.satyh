@@ -1,4 +1,9 @@
-type match-data = (int * int * string) option % begin, end, matched string
+type color-ctx =
+  | Empty
+  | Simple of color
+  | Nested of match-data list
+
+and match-data = (int * int * string * color-ctx) option
 
 type regex-vm = (|
   pos-stack : int list;

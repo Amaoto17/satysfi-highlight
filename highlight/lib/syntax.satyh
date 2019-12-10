@@ -25,25 +25,18 @@ module Syntax : sig
   val capture : int -> decorator -> rule -> rule
   val captures : (int * decorator) list -> rule -> rule
   val style : style -> decorator
-  val include : rule -> decorator
+  % val include : rule -> decorator
   val highlight : context -> rule list -> rule -> string -> inline-boxes * rule list
 
 end = struct
-
-  type color-ctx =
-    | Empty
-    | Simple of color
-    | Nested of submatch list
-
-  and submatch = match-data * color-ctx
 
   type continuation =
     | Done
     | Continue of rule list
 
-  and rule = (submatch list * continuation) parser
+  and rule = (match-data list * continuation) parser
 
-  type decorator = submatch -> submatch
+  type decorator = match-data -> match-data
 
 
   let-mutable cache <- fun _ -> None
@@ -58,15 +51,8 @@ end = struct
   let find-cache str =
     let g = !cache in g str
 
-  let fix = Parser.fix
 
-  % let pattern pat =
-  %   let () = display-message `compile ...` in
-  %   let re = Regex.compile pat in
-  %   attempt re >>= (fun matched -> (
-  %     let submatches = matched |> List.map (fun data -> (data, Empty)) in
-  %     return (submatches, Done)
-  %   ))
+  let fix = Parser.fix
 
   let pattern pat =
     let re =
@@ -78,8 +64,7 @@ end = struct
           let () = add-cache pat re in
           re
     in
-    attempt re >>= (fun matched -> (
-      let submatches = matched |> List.map (fun data -> (data, Empty)) in
+    attempt re >>= (fun submatches -> (
       return (submatches, Done)
     ))
 
@@ -96,7 +81,7 @@ end = struct
     let color-ctx =
       match b#style with
       | None -> Empty
-      | Some tok -> Simple (ColorScheme.color-of tok)
+      | Some style -> Simple (ColorScheme.color-of style)
     in
     let-rec iter acc lpos = fun st -> st |> run (
       let entire-match =
@@ -104,7 +89,7 @@ end = struct
           if lpos == rpos then return []
           else
             let s = string-sub (Stream.source st) lpos (rpos - lpos) in
-            return [(Some (lpos, rpos, s), color-ctx)]
+            return [Some (lpos, rpos, s, color-ctx)]
         ))
       in
       let done acc =
@@ -152,8 +137,7 @@ end = struct
     iter 0 lst
 
   let keywords lst =
-    Regex.keywords lst >>= (fun matched -> (
-      let submatches = matched |> List.map (fun data -> (data, Empty)) in
+    attempt (Regex.keywords lst) >>= (fun submatches -> (
       return (submatches, Done)
     ))
 
@@ -165,39 +149,43 @@ end = struct
   let captures lst p =
     List.fold-left (fun p (n, f) -> capture n f p) p lst
 
-  let style sty submatch =
-    let (data, color-ctx) = submatch in
-    (data, Simple (ColorScheme.color-of sty))
+  % let style sty submatch =
+  %   let (data, color-ctx) = submatch in
+  %   (data, Simple (ColorScheme.color-of sty))
 
-  let include rule submatch =
-    let p =
-      let-rec iter acc = fun st -> st |> run (
-        choice [
-          eof >> return (UList.rev-concat acc)
-        ; rule >>= (fun (submatches, k) -> (
-            match k with
-            | Done -> iter (submatches :: acc)
-            | Continue _ -> iter acc
-          ))
-        ; any >> iter acc
-        ]
-      ) in iter []
-    in
-    let (data, color-ctx) = submatch in
-    match data with
-    | None -> submatch
-    | Some (bpos, epos, s) -> (
-        match parse p (Some regex-vm-init) s with
-        | Error _ -> submatch
-        | Ok submatches -> (data, Nested submatches)
-      )
+  let style sty submatch =
+    submatch |> Option.map (fun (bpos, epos, s, _) ->
+      (bpos, epos, s, Simple (ColorScheme.color-of sty)))
+
+  % let include rule submatch =
+  %   let p =
+  %     let-rec iter acc = fun st -> st |> run (
+  %       choice [
+  %         eof >> return (UList.rev-concat acc)
+  %       ; rule >>= (fun (submatches, k) -> (
+  %           match k with
+  %           | Done -> iter (submatches :: acc)
+  %           | Continue _ -> iter acc
+  %         ))
+  %       ; any >> iter acc
+  %       ]
+  %     ) in iter []
+  %   in
+  %   let (data, color-ctx) = submatch in
+  %   match data with
+  %   | None -> submatch
+  %   | Some (bpos, epos, s) -> (
+  %       match parse p (Some regex-vm-init) s with
+  %       | Error _ -> submatch
+  %       | Ok submatches -> (data, Nested submatches)
+  %     )
 
   let serialize submatches =
     let-rec iter acc offset submatches =
       match submatches with
       | [] -> acc
-      | (None, _) :: rest -> iter acc offset rest
-      | (Some (bpos, epos, s), color-ctx) :: rest -> (
+      | (None) :: rest -> iter acc offset rest
+      | (Some (bpos, epos, s, color-ctx)) :: rest -> (
           match color-ctx with
           | Empty ->
               let elem = (bpos + offset, epos + offset, s, None) in

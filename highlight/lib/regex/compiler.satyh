@@ -38,7 +38,7 @@ end = struct
 
   let set-match n bpos epos s =
     get-state >>= (fun ctx -> (
-      let matched = list-nth-set n (Some (bpos, epos, s)) ctx#matched in
+      let matched = list-nth-set n (Some (bpos, epos, s, Empty)) ctx#matched in
       put-state (| ctx with matched = matched |)
     ))
 
@@ -72,7 +72,7 @@ end = struct
     get-nth-match n >>= (fun submatch-opt -> (
       match submatch-opt with
       | None -> problem `matching group doesn't exist`
-      | Some (_, _, s) -> string s >> return ()
+      | Some (_, _, s, _) -> string s >> return ()
     ))
 
   let terminal = return ()

@@ -336,17 +336,9 @@ end = struct
 
     let rule-keywords =
       patterns [
-        keywords [
-          `downto`; `if`; `else`; `match`; `then`; `to`;
-          `when`; `with`; `try`
-        ]
+        pattern `\b(downto|if|else|match|then|to|when|with|try)\b`
           |> capture 0 (style ControlKeyword)
-      ; keywords [
-          `as`; `assert`; `class`; `constraint`; `exception`; `external`;
-          `functor`; `in`; `include`; `inherit`; `initializer`; `lazy`;
-          `let`; `module`; `mutable`; `new`; `object`; `open`;
-          `private`; `rec`; `sig`; `struct`; `type`; `virtual`
-        ]
+      ; pattern `\b(as|assert|class|constraint|exception|external|functor|in|include|inherit|initializer|lazy|let|module|mutable|new|object|open|private|rec|sig|struct|type|virtual)\b`
           |> capture 0 (style Keyword)
       ]
     in
