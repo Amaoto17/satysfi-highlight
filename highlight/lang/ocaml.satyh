@@ -193,8 +193,8 @@ end = struct
     let rule-block =
       pattern-block (|
         enter =
-          keywords [`begin`; `module`; `sig`]
-            |> capture 1 (style Keyword)
+          keywords [`begin`; `struct`; `sig`]
+            |> capture 0 (style Keyword)
       ; leave =
           keywords [`end`]
             |> capture 0 (style Keyword)

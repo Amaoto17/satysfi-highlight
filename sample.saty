@@ -12,138 +12,34 @@ document (|
   +section{OCamlでの例} <
     +code?:(OCaml.rule)(
 ```
-(* oneline comment *)
-
-(*
-  multi
-  line
-  comment
-*)
-
-(*
-  (* nested comment *)
-*)
-
-(*
-  abc
-  "SATySFi
-        def
-"
-  (* def *)
-*)
-
-let array = [|1; 2; 3|]
-
-let list = ["abc"; "def"]
-
-let s0 = "abc"
-let s1 = "abc\n"
-let s2 = {|abc|}
-let s3 = {id|abc|id}
-let s4 = "\u{1Af}"
-
-let module A = Array
-
-let open Main.Bytecomp.Ast
-
-let f0 = 123.45
-let f1 = 123.
-let f2 = 0.45e1_234
-let f3 = 12.e-9
-
-let i0 = 123
-let i1 = 0x1Af
-let i2 = 0o730
-let i3 = 0b110100
-
-let c0 = 'a'
-let c1 = '\x1b'
-let c2 = '\012'
-let c3 = '\n'
-
-let rec is_even n =
-  if n = 0 then true else odd @@ n - 1
-
-and odd = function
-  | 0 -> false
-  | n -> even (n - 1)
-
-let f t =
-  match t with
-  | None -> 0
-  | Some x when x = 1 -> 1
-  | Some _ -> 2
-
-let g = function Some _ -> 1 | None -> 0
-
-#000
-#000"abc\n"
-
-let (>>) p p' =
-  p >>= fun _ -> p'
-
-module type S = sig
-  type a
-  type b = int
-  type c = int -> int
-  type d = int * int
-  type e = (int, string) result
-  type f = int * 'a as 'a
-  type g = A | B of int
-  type h = [ `A | `B of int ]
-
-  val a : int
-  val b : n:int -> int
-  val c : ?n:int -> int
-end
-
 module Option : sig
-  type 'a t = None | Some of 'a
+  type 'a t
   val return : 'a -> 'a t
+  val bind : 'a t -> ('a -> 'b t) -> 'b t
+  val map : ('a -> 'b) -> 'a t -> 'b t
+  val show : ('a -> string) -> 'a t -> string
+  (*
+    val join : 'a t t -> 'a t
+    val from : 'a -> 'a t -> 'a
+  *)
 end = struct
-  type 'a t =
-    | None
-    | Some of 'a
+  type 'a t = None | Some of 'a
 
   let return x = Some x
+
+  let bind m f =
+    match m with
+    | None -> None
+    | Some x -> f x
+
+  let (>>=) = bind
+
+  let map f m = m >>= fun x -> return (f x)
+
+  let show printer = function
+    | None -> "None"
+    | Some x -> Printf.sprintf "Some (%s)" @@ printer x
 end
-
-open Option
-
-for i = 0 to 10 do
-  for j = 0 to 10 do
-  done
-done
-
-while true do
-done
-
-type t = string option
-
-type t = int array list
-
-let a = a := b
-let b = a && b
-let c = a || b
-let d = a != b
-let e = a -. b
-let f = a land b
-
-exception Compile_error of string
-
-let f : int -> int -> int = (+)
-
-let f (x : int) (y : int) = x + y
-
-let f = fun ~x y -> x + y
-
-type t = {
-  mutable a : string;
-  b : int;
-  c : int ref;
-}
-
-let a = { t with b = 1 }
 ```
     );
   >
